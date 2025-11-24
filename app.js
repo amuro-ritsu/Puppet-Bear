@@ -128,19 +128,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ===== イベントリスナー =====
 function setupEventListeners() {
-    // 画像追加
-    document.getElementById('add-image-btn').addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.multiple = true;
-        input.onchange = (e) => {
-            for (const file of e.target.files) {
-                loadImage(file);
-            }
-        };
-        input.click();
-    });
+    // 画像追加はapp-layers.jsで動的に作成
     
     // 再生/停止
     document.getElementById('play-btn').addEventListener('click', togglePlayback);

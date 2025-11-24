@@ -48,6 +48,24 @@ function updateLayerList() {
     folderBtn.onclick = createFolderFromSelection;
     buttonContainer.appendChild(folderBtn);
     
+    // 画像追加ボタン（口パクの上）
+    const imageBtn = document.createElement('button');
+    imageBtn.id = 'add-image-btn';
+    imageBtn.textContent = '📷 画像追加';
+    imageBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, var(--biscuit-dark), var(--biscuit-medium)); color: var(--chocolate-dark); border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
+    imageBtn.onclick = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e) => {
+            if (e.target.files[0]) {
+                loadImage(e.target.files[0]);
+            }
+        };
+        input.click();
+    };
+    buttonContainer.appendChild(imageBtn);
+    
     // 口パクレイヤー追加ボタン
     const lipSyncBtn = document.createElement('button');
     lipSyncBtn.textContent = '💬 口パク追加';

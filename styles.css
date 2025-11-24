@@ -82,29 +82,6 @@ body {
     transform: translateY(-1px);
 }
 
-/* レイヤー追加ボタンエリア */
-.layer-add-buttons {
-    padding: 8px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.btn-add-image {
-    width: 100%;
-    padding: 8px 12px;
-    background: linear-gradient(135deg, var(--biscuit-dark), var(--biscuit-medium));
-    color: var(--chocolate-dark);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: bold;
-    transition: all 0.2s;
-}
-
-.btn-add-image:hover {
-    background: var(--biscuit-light);
-}
-
 /* ===== キャンバス上部ツールバー ===== */
 .canvas-toolbar {
     display: flex;
