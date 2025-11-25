@@ -136,13 +136,16 @@ function renderLayerItem(layer, depth) {
         // 風揺れアイコン
         const windIcon = layer.windSwayEnabled ? '💨' : '';
         
+        // 歩行アイコン
+        const walkIcon = layer.walkingEnabled ? '🚶' : '';
+        
         // 親レイヤーがある場合のインジケータ
         const hasParent = layer.parentLayerId != null;
         const parentIndicator = hasParent ? '🔗' : '';
         
         item.innerHTML = `
             <span class="folder-toggle" onclick="toggleFolder(${layer.id}, event)">${expanded ? '▼' : '▶'}</span>
-            <span class="layer-name">${windIcon}${parentIndicator}📁 ${layer.name}</span>
+            <span class="layer-name">${windIcon}${walkIcon}${parentIndicator}📁 ${layer.name}</span>
             <span class="layer-controls">
                 <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
             </span>

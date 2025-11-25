@@ -7,7 +7,7 @@
  */
 
 // ===== タイムライングローバル変数 =====
-let projectFPS = 30; // デフォルト30fps
+let projectFPS = 24; // デフォルト24fps（アニメ標準）
 let selectedKeyframe = null; // 選択中のキーフレーム
 let isDraggingKeyframe = false;
 let keyframeDragStart = { x: 0, frame: 0 };
@@ -234,6 +234,13 @@ function renderTimelineLayer(layer, y, depth) {
     if (layer.type === 'bounce' && layer.bounceParams && layer.bounceParams.keyframes) {
         layer.bounceParams.keyframes.forEach((kf, kfIndex) => {
             renderBounceKeyframe(layer, kfIndex, y + 20);
+        });
+    }
+    
+    // フォルダの歩行キーフレームを描画
+    if (layer.type === 'folder' && layer.walkingEnabled && layer.walkingParams && layer.walkingParams.keyframes) {
+        layer.walkingParams.keyframes.forEach((kf, kfIndex) => {
+            renderWalkingKeyframe(layer, kfIndex, y + 20);
         });
     }
     
@@ -519,6 +526,57 @@ function renderBounceKeyframe(layer, kfIndex, y) {
     timelineContent.appendChild(keyframeEl);
 }
 
+// ===== 歩行キーフレーム描画 =====
+function renderWalkingKeyframe(layer, kfIndex, y) {
+    const timelineContent = document.getElementById('timeline-content');
+    if (!timelineContent || !layer.walkingParams || !layer.walkingParams.keyframes || !layer.walkingParams.keyframes[kfIndex]) return;
+    
+    const kf = layer.walkingParams.keyframes[kfIndex];
+    
+    const keyframeEl = document.createElement('div');
+    keyframeEl.className = 'keyframe walking';
+    
+    const framePos = kf.frame * timelinePixelsPerFrame;
+    keyframeEl.style.left = framePos + 'px';
+    keyframeEl.style.top = y + 'px';
+    keyframeEl.style.zIndex = '10';
+    
+    // タイプによって色を変える（開始=緑、終了=赤）
+    if (kf.type === 'start') {
+        keyframeEl.style.background = 'linear-gradient(135deg, #4CAF50, #45a049)';
+    } else {
+        keyframeEl.style.background = 'linear-gradient(135deg, #f44336, #d32f2f)';
+    }
+    
+    keyframeEl.dataset.layerId = layer.id;
+    keyframeEl.dataset.walkingKeyframeIndex = kfIndex;
+    
+    keyframeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // キーフレームの時間に移動
+        currentTime = kf.frame / projectFPS;
+        updatePlayhead();
+        if (typeof applyKeyframeInterpolation === 'function') {
+            applyKeyframeInterpolation();
+        }
+        render();
+    });
+    
+    keyframeEl.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // キーフレームの時間に移動
+        currentTime = kf.frame / projectFPS;
+        updatePlayhead();
+        if (typeof applyKeyframeInterpolation === 'function') {
+            applyKeyframeInterpolation();
+        }
+        render();
+    }, { passive: false });
+    
+    timelineContent.appendChild(keyframeEl);
+}
+
 // ===== レイヤー展開/折りたたみ =====
 function toggleLayerExpansion(layerId) {
     expandedLayers[layerId] = !expandedLayers[layerId];
@@ -537,7 +595,14 @@ function updatePlayhead() {
     
     // transitionなしで即座に更新
     playhead.style.left = framePos + 'px';
-    frameDisplay.textContent = `${currentFrame}f (${currentTime.toFixed(2)}s)`;
+    
+    // 時間表示を「00分00秒 (00f)」形式に
+    const totalSeconds = Math.floor(currentTime);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const minStr = String(minutes).padStart(2, '0');
+    const secStr = String(seconds).padStart(2, '0');
+    frameDisplay.textContent = `${minStr}分${secStr}秒 (${currentFrame}f)`;
     
     // シークバー画像が読み込まれていない場合は作成（初回のみ）
     let bearImg = playhead.querySelector('.playhead-bear');

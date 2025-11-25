@@ -1,6 +1,8 @@
 /**
- * ⭐ Starlit Puppet Editor v1.10.1
+ * ⭐ Starlit Puppet Editor v1.14.1
  * プロパティパネル - UI最適化版
+ * - アンカーポイント設定に警告メッセージを追加
+ * - トランスフォームスライダーと数値入力の同期を改善
  * - ヘッダーツールバーに操作ツール・アンカー設定を配置
  * - トランスフォーム・ブレンドモードを最上部に統一
  * - フォルダ同士で親子関係を設定可能に
@@ -73,11 +75,12 @@ function generateTransformUI(layer) {
                     X: <span id="transformXValue">${layer.x.toFixed(0)}</span>
                 </label>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="range" class="property-slider" style="flex: 1;" value="${layer.x}" 
+                    <input type="range" id="transformXSlider" class="property-slider" style="flex: 1;" value="${layer.x}" 
                         min="-2000" max="2000" step="1"
-                        oninput="document.getElementById('transformXValue').textContent = this.value; if(this.nextElementSibling) this.nextElementSibling.value = this.value; updateLayerPropertyLive('x', parseFloat(this.value))"
+                        oninput="document.getElementById('transformXValue').textContent = this.value; document.getElementById('transformXNumber').value = this.value; updateLayerPropertyLive('x', parseFloat(this.value))"
                         onchange="updateLayerProperty('x', parseFloat(this.value))">
-                    <input type="number" style="width: 80px;" value="${layer.x.toFixed(0)}" 
+                    <input type="number" id="transformXNumber" style="width: 80px;" value="${layer.x.toFixed(0)}" 
+                        oninput="document.getElementById('transformXSlider').value = this.value; document.getElementById('transformXValue').textContent = this.value; updateLayerPropertyLive('x', parseFloat(this.value))"
                         onchange="updateLayerProperty('x', parseFloat(this.value)); updatePropertiesPanel()">
                 </div>
             </div>
@@ -87,11 +90,12 @@ function generateTransformUI(layer) {
                     Y: <span id="transformYValue">${layer.y.toFixed(0)}</span>
                 </label>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="range" class="property-slider" style="flex: 1;" value="${layer.y}" 
+                    <input type="range" id="transformYSlider" class="property-slider" style="flex: 1;" value="${layer.y}" 
                         min="-2000" max="2000" step="1"
-                        oninput="document.getElementById('transformYValue').textContent = this.value; if(this.nextElementSibling) this.nextElementSibling.value = this.value; updateLayerPropertyLive('y', parseFloat(this.value))"
+                        oninput="document.getElementById('transformYValue').textContent = this.value; document.getElementById('transformYNumber').value = this.value; updateLayerPropertyLive('y', parseFloat(this.value))"
                         onchange="updateLayerProperty('y', parseFloat(this.value))">
-                    <input type="number" style="width: 80px;" value="${layer.y.toFixed(0)}" 
+                    <input type="number" id="transformYNumber" style="width: 80px;" value="${layer.y.toFixed(0)}" 
+                        oninput="document.getElementById('transformYSlider').value = this.value; document.getElementById('transformYValue').textContent = this.value; updateLayerPropertyLive('y', parseFloat(this.value))"
                         onchange="updateLayerProperty('y', parseFloat(this.value)); updatePropertiesPanel()">
                 </div>
             </div>
@@ -101,11 +105,12 @@ function generateTransformUI(layer) {
                     回転: <span id="transformRotValue">${layer.rotation.toFixed(1)}°</span>
                 </label>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="range" class="property-slider" style="flex: 1;" value="${layer.rotation}" 
+                    <input type="range" id="transformRotSlider" class="property-slider" style="flex: 1;" value="${layer.rotation}" 
                         min="-360" max="360" step="0.1"
-                        oninput="document.getElementById('transformRotValue').textContent = parseFloat(this.value).toFixed(1) + '°'; updateLayerPropertyLive('rotation', parseFloat(this.value))"
+                        oninput="document.getElementById('transformRotValue').textContent = parseFloat(this.value).toFixed(1) + '°'; document.getElementById('transformRotNumber').value = parseFloat(this.value).toFixed(1); updateLayerPropertyLive('rotation', parseFloat(this.value))"
                         onchange="updateLayerProperty('rotation', parseFloat(this.value))">
-                    <input type="number" style="width: 80px;" value="${layer.rotation.toFixed(1)}" step="0.1"
+                    <input type="number" id="transformRotNumber" style="width: 80px;" value="${layer.rotation.toFixed(1)}" step="0.1"
+                        oninput="document.getElementById('transformRotSlider').value = this.value; document.getElementById('transformRotValue').textContent = parseFloat(this.value).toFixed(1) + '°'; updateLayerPropertyLive('rotation', parseFloat(this.value))"
                         onchange="updateLayerProperty('rotation', parseFloat(this.value)); updatePropertiesPanel()">
                 </div>
             </div>
@@ -115,11 +120,12 @@ function generateTransformUI(layer) {
                     スケール: <span id="transformScaleValue">${layer.scale.toFixed(2)}</span>
                 </label>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="range" class="property-slider" style="flex: 1;" value="${layer.scale}" 
+                    <input type="range" id="transformScaleSlider" class="property-slider" style="flex: 1;" value="${layer.scale}" 
                         min="0.1" max="3" step="0.01"
-                        oninput="document.getElementById('transformScaleValue').textContent = parseFloat(this.value).toFixed(2); updateLayerPropertyLive('scale', parseFloat(this.value))"
+                        oninput="document.getElementById('transformScaleValue').textContent = parseFloat(this.value).toFixed(2); document.getElementById('transformScaleNumber').value = parseFloat(this.value).toFixed(2); updateLayerPropertyLive('scale', parseFloat(this.value))"
                         onchange="updateLayerProperty('scale', parseFloat(this.value))">
-                    <input type="number" style="width: 80px;" value="${layer.scale.toFixed(2)}" step="0.01"
+                    <input type="number" id="transformScaleNumber" style="width: 80px;" value="${layer.scale.toFixed(2)}" step="0.01"
+                        oninput="document.getElementById('transformScaleSlider').value = this.value; document.getElementById('transformScaleValue').textContent = parseFloat(this.value).toFixed(2); updateLayerPropertyLive('scale', parseFloat(this.value))"
                         onchange="updateLayerProperty('scale', parseFloat(this.value)); updatePropertiesPanel()">
                 </div>
             </div>
@@ -129,11 +135,12 @@ function generateTransformUI(layer) {
                     不透明度: <span id="transformOpacityValue">${(layer.opacity * 100).toFixed(0)}%</span>
                 </label>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="range" class="property-slider" style="flex: 1;" value="${layer.opacity}" 
+                    <input type="range" id="transformOpacitySlider" class="property-slider" style="flex: 1;" value="${layer.opacity}" 
                         min="0" max="1" step="0.01"
-                        oninput="document.getElementById('transformOpacityValue').textContent = (parseFloat(this.value) * 100).toFixed(0) + '%'; updateLayerPropertyLive('opacity', parseFloat(this.value))"
+                        oninput="document.getElementById('transformOpacityValue').textContent = (parseFloat(this.value) * 100).toFixed(0) + '%'; document.getElementById('transformOpacityNumber').value = (parseFloat(this.value) * 100).toFixed(0); updateLayerPropertyLive('opacity', parseFloat(this.value))"
                         onchange="updateLayerProperty('opacity', parseFloat(this.value))">
-                    <input type="number" style="width: 80px;" value="${(layer.opacity * 100).toFixed(0)}" step="1" min="0" max="100"
+                    <input type="number" id="transformOpacityNumber" style="width: 80px;" value="${(layer.opacity * 100).toFixed(0)}" step="1" min="0" max="100"
+                        oninput="document.getElementById('transformOpacitySlider').value = parseFloat(this.value) / 100; document.getElementById('transformOpacityValue').textContent = this.value + '%'; updateLayerPropertyLive('opacity', parseFloat(this.value) / 100)"
                         onchange="updateLayerProperty('opacity', parseFloat(this.value) / 100); updatePropertiesPanel()">
                 </div>
             </div>
@@ -273,10 +280,13 @@ function updatePropertiesPanel() {
             </div>
             
             ${generateWindSwayUI(layer)}
+            
+            ${generateWalkingUI(layer)}
         `;
         
         updateToolButtons();
         setupWindSwayEventListeners();
+        setupWalkingEventListeners();
         clearPinElements();
         return;
     }
@@ -840,10 +850,10 @@ function generateWindSwayUI(layer) {
                 <!-- 揺れ周期 -->
                 <div style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        揺れ周期: <span id="windPeriodValue">${ws.period.toFixed(1)}秒</span>
+                        揺れ周期: <span id="windPeriodValue">${Math.round(ws.period)}秒</span>
                     </label>
-                    <input type="range" class="property-slider" id="prop-wind-period" value="${ws.period}" 
-                        min="0.1" max="10" step="0.1">
+                    <input type="range" class="property-slider" id="prop-wind-period" value="${Math.round(ws.period)}" 
+                        min="1" max="10" step="1">
                 </div>
                 
                 <!-- 揺れズレ -->
@@ -1004,9 +1014,9 @@ function setupWindSwayEventListeners() {
     }, '°');
     
     setupWindSwaySlider('period', 'windPeriodValue', (value) => {
-        layer.windSwayParams.period = parseFloat(value);
+        layer.windSwayParams.period = parseInt(value);
         render();
-    }, '秒', 1);
+    }, '秒', 0);
     
     setupWindSwaySlider('phaseshift', 'windPhaseShiftValue', (value) => {
         layer.windSwayParams.phaseShift = parseFloat(value);

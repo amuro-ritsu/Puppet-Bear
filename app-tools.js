@@ -1,7 +1,8 @@
 /**
- * ⭐ Starlit Puppet Editor v1.1.6
+ * ⭐ Starlit Puppet Editor v1.1.7
  * ツール機能 - 回転ハンドル・ポジション
  * - 判定範囲を200pxに拡大
+ * - updatePropertyValuesでスライダーと数値入力の同期を修正
  */
 
 // ===== ツール切り替え =====
@@ -311,12 +312,48 @@ function isPointInLayer(mouseX, mouseY, layer) {
 
 // ===== プロパティ値のリアルタイム更新 =====
 function updatePropertyValues(layer) {
-    // 数値表示を更新
+    // X座標
     const xValue = document.getElementById('transformXValue');
-    const yValue = document.getElementById('transformYValue');
-    const rotValue = document.getElementById('transformRotValue');
+    const xSlider = document.getElementById('transformXSlider');
+    const xNumber = document.getElementById('transformXNumber');
     
     if (xValue) xValue.textContent = layer.x.toFixed(0);
+    if (xSlider) xSlider.value = layer.x;
+    if (xNumber) xNumber.value = layer.x.toFixed(0);
+    
+    // Y座標
+    const yValue = document.getElementById('transformYValue');
+    const ySlider = document.getElementById('transformYSlider');
+    const yNumber = document.getElementById('transformYNumber');
+    
     if (yValue) yValue.textContent = layer.y.toFixed(0);
+    if (ySlider) ySlider.value = layer.y;
+    if (yNumber) yNumber.value = layer.y.toFixed(0);
+    
+    // 回転
+    const rotValue = document.getElementById('transformRotValue');
+    const rotSlider = document.getElementById('transformRotSlider');
+    const rotNumber = document.getElementById('transformRotNumber');
+    
     if (rotValue) rotValue.textContent = layer.rotation.toFixed(1) + '°';
+    if (rotSlider) rotSlider.value = layer.rotation;
+    if (rotNumber) rotNumber.value = layer.rotation.toFixed(1);
+    
+    // スケール
+    const scaleValue = document.getElementById('transformScaleValue');
+    const scaleSlider = document.getElementById('transformScaleSlider');
+    const scaleNumber = document.getElementById('transformScaleNumber');
+    
+    if (scaleValue) scaleValue.textContent = layer.scale.toFixed(2);
+    if (scaleSlider) scaleSlider.value = layer.scale;
+    if (scaleNumber) scaleNumber.value = layer.scale.toFixed(2);
+    
+    // 不透明度
+    const opacityValue = document.getElementById('transformOpacityValue');
+    const opacitySlider = document.getElementById('transformOpacitySlider');
+    const opacityNumber = document.getElementById('transformOpacityNumber');
+    
+    if (opacityValue) opacityValue.textContent = (layer.opacity * 100).toFixed(0) + '%';
+    if (opacitySlider) opacitySlider.value = layer.opacity;
+    if (opacityNumber) opacityNumber.value = (layer.opacity * 100).toFixed(0);
 }

@@ -6,10 +6,11 @@
 // ===== 再生/停止 =====
 function togglePlayback() {
     isPlaying = !isPlaying;
-    const btn = document.getElementById('play-btn');
+    const playIcon = document.getElementById('play-icon');
     
     if (isPlaying) {
-        btn.textContent = '⏸️ 停止';
+        // 一時停止アイコンに変更
+        if (playIcon) playIcon.src = 'pause.png';
         lastFrameTime = performance.now();
         
         // 音声再生を開始
@@ -19,7 +20,8 @@ function togglePlayback() {
         
         animationFrameId = requestAnimationFrame(animationLoop);
     } else {
-        btn.textContent = '▶️ 再生';
+        // 再生アイコンに変更
+        if (playIcon) playIcon.src = 'play.png';
         
         // 音声再生を停止
         if (typeof syncAudioWithPlayback === 'function') {
@@ -38,8 +40,8 @@ function stopPlayback() {
     // 再生中なら停止
     if (isPlaying) {
         isPlaying = false;
-        const btn = document.getElementById('play-btn');
-        btn.textContent = '▶️ 再生';
+        const playIcon = document.getElementById('play-icon');
+        if (playIcon) playIcon.src = 'play.png';
         
         // 音声再生を停止
         if (typeof syncAudioWithPlayback === 'function') {

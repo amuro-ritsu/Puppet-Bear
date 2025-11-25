@@ -1,6 +1,7 @@
 /**
- * ⭐ Starlit Puppet Editor v1.10.1
+ * ⭐ Starlit Puppet Editor v1.10.3
  * コア機能 - レイヤー管理・描画
+ * - パペットレイヤーの軸アンカー描画でアンカーオフセットを考慮
  * - フォルダ間親子関係の描画対応
  * - パペット・バウンスレイヤーの親変形対応
  */
@@ -174,6 +175,14 @@ function render() {
                 const finalScale = layer.scale * parentTransform.scale;
                 
                 ctx.translate(finalX, finalY);
+                
+                // ★ アンカーオフセット処理（通常の画像レイヤーと同じ）★
+                const imgWidth = layer.img ? layer.img.width : 100;
+                const imgHeight = layer.img ? layer.img.height : 100;
+                const anchorOffsetX = (layer.anchorX || 0.5) * imgWidth;
+                const anchorOffsetY = (layer.anchorY || 0.5) * imgHeight;
+                ctx.translate(anchorOffsetX - imgWidth / 2, anchorOffsetY - imgHeight / 2);
+                
                 ctx.rotate(finalRotation * Math.PI / 180);
                 ctx.scale(finalScale, finalScale);
                 
@@ -573,6 +582,14 @@ function applyParentTransform(layer) {
     if (parent.type === 'folder') {
         const anchorOffsetX = parent.anchorOffsetX || 0;
         const anchorOffsetY = parent.anchorOffsetY || 0;
+        
+        // 歩行アニメーションのオフセットを適用
+        if (parent.walkingEnabled && typeof calculateWalkingOffset === 'function') {
+            const walkingOffset = calculateWalkingOffset(parent, currentTime);
+            if (walkingOffset.active) {
+                ctx.translate(walkingOffset.x, walkingOffset.y);
+            }
+        }
         
         // アンカーポイントを原点に移動
         ctx.translate(anchorOffsetX, anchorOffsetY);

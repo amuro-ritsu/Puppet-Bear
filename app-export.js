@@ -413,6 +413,26 @@ function showExportDialog() {
                     </select>
                 </div>
                 
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 12px; display: block; margin-bottom: 6px; color: var(--biscuit);">
+                        フレームレート:
+                    </label>
+                    <select id="export-fps" style="
+                        width: 100%;
+                        padding: 8px;
+                        background: var(--bg-dark);
+                        border: 2px solid var(--border-color);
+                        color: var(--text-light);
+                        border-radius: 4px;
+                        cursor: pointer;
+                    ">
+                        <option value="24" selected>24 fps（アニメ標準）</option>
+                        <option value="30">30 fps</option>
+                        <option value="60">60 fps（滑らか）</option>
+                        <option value="12">12 fps（コマ撮り風）</option>
+                    </select>
+                </div>
+                
                 <div id="video-quality-option">
                     <label style="font-size: 12px; display: block; margin-bottom: 6px; color: var(--biscuit);">
                         ビットレート: <span id="export-bitrate-value">8</span> Mbps
@@ -508,6 +528,7 @@ async function startExport() {
     const transparent = document.getElementById('export-transparent').checked;
     const resolution = document.getElementById('export-resolution').value;
     const bitrate = parseInt(document.getElementById('export-bitrate').value) * 1000000;
+    const exportFPS = parseInt(document.getElementById('export-fps').value);
     
     // 解像度をパース
     let exportWidth, exportHeight;
@@ -531,9 +552,9 @@ async function startExport() {
     
     try {
         if (format === 'png') {
-            await exportPngSequence(exportWidth, exportHeight, transparent);
+            await exportPngSequence(exportWidth, exportHeight, transparent, exportFPS);
         } else {
-            await exportVideo(format, exportWidth, exportHeight, includeAudio, transparent, bitrate);
+            await exportVideo(format, exportWidth, exportHeight, includeAudio, transparent, bitrate, exportFPS);
         }
     } catch (error) {
         console.error('書き出しエラー:', error);
@@ -548,9 +569,12 @@ async function startExport() {
 
 // ===== 連番PNG書き出し =====
 
-async function exportPngSequence(width, height, transparent) {
+async function exportPngSequence(width, height, transparent, exportFPS) {
     const range = getExportRange();
-    const totalFrames = range.end - range.start;
+    
+    // フレーム数を書き出しFPSに合わせて計算
+    const durationSec = (range.end - range.start) / projectFPS;
+    const totalFrames = Math.ceil(durationSec * exportFPS);
     
     updateExportProgress(0, '連番PNG生成中...');
     
@@ -577,8 +601,8 @@ async function exportPngSequence(width, height, transparent) {
     
     try {
         for (let i = 0; i <= totalFrames; i++) {
-            const frame = range.start + i;
-            currentTime = frame / projectFPS;
+            // 書き出しFPSに基づいて時間を計算
+            currentTime = (range.start / projectFPS) + (i / exportFPS);
             
             // キーフレーム補間を適用
             if (typeof applyKeyframeInterpolation === 'function') {
@@ -620,9 +644,9 @@ async function exportPngSequence(width, height, transparent) {
 
 // ===== 動画書き出し =====
 
-async function exportVideo(format, width, height, includeAudio, transparent, bitrate) {
+async function exportVideo(format, width, height, includeAudio, transparent, bitrate, exportFPS) {
     // WebM書き出し（MediaRecorder使用）
-    await exportWebM(width, height, includeAudio, transparent, bitrate);
+    await exportWebM(width, height, includeAudio, transparent, bitrate, exportFPS);
 }
 
 // ===== WebM書き出し（MediaRecorder使用） =====
@@ -652,9 +676,12 @@ function getSupportedMimeType(preferTransparent) {
     return null;
 }
 
-async function exportWebM(width, height, includeAudio, transparent, bitrate) {
+async function exportWebM(width, height, includeAudio, transparent, bitrate, exportFPS) {
     const range = getExportRange();
-    const totalFrames = range.end - range.start;
+    
+    // フレーム数を書き出しFPSに合わせて計算
+    const durationSec = (range.end - range.start) / projectFPS;
+    const totalFrames = Math.ceil(durationSec * exportFPS);
     
     updateExportProgress(0, 'WebM生成準備中...');
     
@@ -675,8 +702,8 @@ async function exportWebM(width, height, includeAudio, transparent, bitrate) {
         console.warn('⚠️ VP9がサポートされていないため、透過出力が正しく動作しない可能性があります');
     }
     
-    // キャンバスからストリームを取得
-    const stream = tempCanvas.captureStream(projectFPS);
+    // キャンバスからストリームを取得（書き出しFPSを使用）
+    const stream = tempCanvas.captureStream(exportFPS);
     
     // 音声トラックを追加（音声を含める場合）
     let audioDestination = null;
@@ -751,7 +778,7 @@ async function exportWebM(width, height, includeAudio, transparent, bitrate) {
         
         // フレームごとにレンダリング
         let frameIndex = 0;
-        const frameInterval = 1000 / projectFPS;
+        const frameInterval = 1000 / exportFPS;
         
         const renderNextFrame = async () => {
             if (frameIndex > totalFrames) {
@@ -759,8 +786,8 @@ async function exportWebM(width, height, includeAudio, transparent, bitrate) {
                 return;
             }
             
-            const frame = range.start + frameIndex;
-            currentTime = frame / projectFPS;
+            // 書き出しFPSに基づいて時間を計算
+            currentTime = (range.start / projectFPS) + (frameIndex / exportFPS);
             
             // キーフレーム補間を適用
             if (typeof applyKeyframeInterpolation === 'function') {

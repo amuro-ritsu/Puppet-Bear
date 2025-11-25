@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>🐻 Puppet Bear v1.14.0</title>
+    <title>🐻 Puppet Bear v1.15.0</title>
     
     <!-- PWA メタタグ -->
     <meta name="description" content="Puppet Bear - パペットアニメーション編集ツール">
@@ -70,6 +70,9 @@
                             <input type="range" class="toolbar-slider" id="header-anchor-y-slider" value="50" min="0" max="100" step="1"
                                 oninput="document.getElementById('headerAnchorY').textContent = this.value; setAnchorPointLive('y', parseFloat(this.value) / 100)">
                         </label>
+                        <div style="font-size: 10px; color: #ff9800; margin-top: 4px; padding: 4px 8px; background: rgba(255, 152, 0, 0.1); border-radius: 4px; text-align: center; white-space: nowrap;">
+                            ⚠️ トランスフォーム前に設定
+                        </div>
                     </div>
                     <div class="toolbar-separator"></div>
                     <label class="toolbar-checkbox">
@@ -92,15 +95,20 @@
                         
                         <!-- 再生コントロール -->
                         <div class="playback-controls">
-                            <button id="play-btn" class="playback-btn" title="再生">▶️</button>
-                            <button id="stop-btn" class="playback-btn" title="停止">⏹️</button>
+                            <button id="play-btn" class="playback-btn kuma-btn" title="再生/一時停止">
+                                <img src="play.png" alt="再生" class="kuma-icon" id="play-icon">
+                            </button>
+                            <button id="stop-btn" class="playback-btn kuma-btn" title="停止">
+                                <img src="stop.png" alt="停止" class="kuma-icon">
+                            </button>
                             <label class="loop-checkbox">
                                 <input type="checkbox" id="loop-playback-checkbox" onchange="setLoopPlayback(this.checked)">
                                 <span>🔁</span>
                             </label>
+                            <span id="current-frame-display" class="current-frame">00分00秒 (0f)</span>
                             <div class="fps-selector">
-                                <button id="fps-24" class="fps-btn">24</button>
-                                <button id="fps-30" class="fps-btn active">30</button>
+                                <button id="fps-24" class="fps-btn active">24</button>
+                                <button id="fps-30" class="fps-btn">30</button>
                             </div>
                         </div>
                         
@@ -119,15 +127,13 @@
                         
                         <!-- Undo/Redo ボタン -->
                         <div class="undo-redo-buttons">
-                            <button id="undo-btn" class="icon-btn" onclick="undo()" title="元に戻す (Ctrl+Z)" disabled>
-                                <span class="icon-btn-text">↩️</span>
+                            <button id="undo-btn" class="icon-btn kuma-btn" onclick="undo()" title="元に戻す (Ctrl+Z)" disabled>
+                                <img src="undo.png" alt="元に戻す" class="kuma-icon-small">
                             </button>
-                            <button id="redo-btn" class="icon-btn" onclick="redo()" title="やり直し (Ctrl+Y)" disabled>
-                                <span class="icon-btn-text">↪️</span>
+                            <button id="redo-btn" class="icon-btn kuma-btn" onclick="redo()" title="やり直し (Ctrl+Y)" disabled>
+                                <img src="redo.png" alt="やり直し" class="kuma-icon-small">
                             </button>
                         </div>
-                        
-                        <span id="current-frame-display" class="current-frame">0f (0.00s)</span>
                     </div>
                     <div class="timeline-body">
                         <div class="timeline-left">
@@ -158,6 +164,7 @@
     <script src="app-history.js"></script>
     <script src="app-windsway.js"></script>
     <script src="app-bounce.js"></script>
+    <script src="app-walking.js"></script>
     <script src="app-puppet.js"></script>
     <script src="app-audio.js"></script>
     <script src="app-timeline.js"></script>

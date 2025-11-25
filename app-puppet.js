@@ -1,6 +1,11 @@
 /**
- * ⭐ Starlit Puppet Editor v1.10.1
- * パペット機能 - 複数ハンドル親子関係システム
+ * ⭐ Starlit Puppet Editor v1.10.3
+ * パペット機能 - アンカーオフセット修正
+ * 
+ * v1.10.3:
+ * - fallbackDrawImageでアンカーオフセット処理を通常レイヤーと統一
+ * - WebGL描画でもアンカーオフセット処理を修正
+ * - 読み込み直後のアンカー設定で画像が動かないように修正
  * 
  * v1.10.1:
  * - ハンドル追加時にレイヤー位置をキーフレームに記録
@@ -489,11 +494,16 @@ function drawPuppetLayer(layer, time) {
         
         // ★ 親変形を適用した座標を使用 ★
         ctx.translate(finalX, finalY);
+        
+        // ★ アンカーオフセット計算（通常の画像レイヤーと同じ方法）★
+        const anchorOffsetX = l.anchorX * l.img.width;
+        const anchorOffsetY = l.anchorY * l.img.height;
+        ctx.translate(anchorOffsetX - l.img.width / 2, anchorOffsetY - l.img.height / 2);
+        
         ctx.rotate(finalRotation * Math.PI / 180);
         ctx.scale(finalScale, finalScale);
         
-        const anchorOffsetX = l.anchorX * l.img.width;
-        const anchorOffsetY = l.anchorY * l.img.height;
+        // ★ 通常レイヤーと同じ描画位置 ★
         ctx.drawImage(l.img, -anchorOffsetX, -anchorOffsetY);
         ctx.restore();
     };
@@ -630,9 +640,14 @@ function drawPuppetLayer(layer, time) {
     ctx.globalCompositeOperation = layer.blendMode || 'source-over';
     
     ctx.translate(finalX, finalY);
+    
+    // ★ アンカーオフセット処理（通常の画像レイヤーと同じ方法）★
+    ctx.translate(anchorOffsetX - imgWidth / 2, anchorOffsetY - imgHeight / 2);
+    
     ctx.rotate(finalRotation * Math.PI / 180);
     ctx.scale(finalScale, finalScale);
     
+    // ★ 通常レイヤーと同じ描画位置（marginを考慮）★
     const drawX = -anchorOffsetX - margin;
     const drawY = -anchorOffsetY - margin;
     ctx.drawImage(glCanvas, drawX, drawY);
@@ -1482,10 +1497,21 @@ function getParentTransform(parentLayerId) {
     const grandSin = Math.sin(grandRad);
     
     // 親の位置を親の親の変形で変換
-    const transformedParentX = parent.x * grandParentTransform.scale * grandCos 
+    let transformedParentX = parent.x * grandParentTransform.scale * grandCos 
                               - parent.y * grandParentTransform.scale * grandSin;
-    const transformedParentY = parent.x * grandParentTransform.scale * grandSin 
+    let transformedParentY = parent.x * grandParentTransform.scale * grandSin 
                               + parent.y * grandParentTransform.scale * grandCos;
+    
+    // フォルダの歩行アニメーションオフセットを追加
+    if (parent.type === 'folder' && parent.walkingEnabled && typeof calculateWalkingOffset === 'function') {
+        const walkingOffset = calculateWalkingOffset(parent, currentTime);
+        if (walkingOffset.active) {
+            transformedParentX += walkingOffset.x * grandParentTransform.scale * grandCos 
+                                 - walkingOffset.y * grandParentTransform.scale * grandSin;
+            transformedParentY += walkingOffset.x * grandParentTransform.scale * grandSin 
+                                 + walkingOffset.y * grandParentTransform.scale * grandCos;
+        }
+    }
     
     return {
         x: grandParentTransform.x + transformedParentX,
