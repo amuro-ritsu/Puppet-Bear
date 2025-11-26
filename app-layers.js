@@ -378,14 +378,18 @@ function renderLayerItem(layer, depth) {
         const nameLabel = document.createElement('div');
         nameLabel.className = 'layer-name-label';
         nameLabel.style.cssText = `
-            padding: 4px 8px 6px ${depth * 20 + 8}px;
-            font-size: 11px;
+            padding: 8px 8px 12px ${depth * 20 + 8}px;
+            margin-bottom: 4px;
+            font-size: 12px;
             color: var(--accent-gold);
             font-weight: bold;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            line-height: 1.4;
+            line-height: 1.6;
+            background: rgba(139, 90, 43, 0.3);
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-gold);
         `;
         nameLabel.textContent = `▽ ${layer.name}`;
         layerList.appendChild(nameLabel);
@@ -401,6 +405,12 @@ function renderLayerItem(layer, depth) {
     if (selectedLayerIds.includes(layer.id)) {
         item.classList.add('selected');
     }
+    
+    // タッチデバイスでの長押しによるコンテキストメニュー防止
+    item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        return false;
+    });
     
     // ドラッグイベント
     item.addEventListener('dragstart', (e) => handleDragStart(e, layer.id));
@@ -444,6 +454,8 @@ function renderLayerItem(layer, depth) {
             <span class="folder-toggle" onclick="toggleFolder(${layer.id}, event)">${expanded ? '▼' : '▶'}</span>
             <span class="layer-name">${windIcon}${walkIcon}${parentIndicator}${typeIcon} ${layer.name}</span>
             <span class="layer-controls">
+                <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
+                <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
                 <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
             </span>
         `;
@@ -471,6 +483,8 @@ function renderLayerItem(layer, depth) {
         item.innerHTML = `
             <span class="layer-name">${typeIcon} ${layer.name} <span style="font-size: 10px; color: #1db954;">(${clipCount}クリップ)</span></span>
             <span class="layer-controls">
+                <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
+                <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
                 <button onclick="toggleLayerVisibility(${layer.id}, event)">${layer.visible ? '👀' : '🙈'}</button>
                 <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
             </span>
@@ -490,6 +504,8 @@ function renderLayerItem(layer, depth) {
         item.innerHTML = `
             <span class="layer-name">${windIcon}${childIndicator}${parentIndicator}${typeIcon} ${layer.name}</span>
             <span class="layer-controls">
+                <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
+                <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
                 <button onclick="toggleLayerVisibility(${layer.id}, event)">${layer.visible ? '👀' : '🙈'}</button>
                 <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
             </span>
@@ -1090,4 +1106,68 @@ function createBounceLayer() {
         reader.readAsDataURL(file);
     };
     input.click();
+}
+
+// ===== レイヤーを上に移動（表示順で前面に） =====
+function moveLayerUp(layerId, event) {
+    if (event) event.stopPropagation();
+    
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    // 同じ親を持つレイヤー内での順序を変更
+    const siblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
+    const currentIndex = siblings.indexOf(layer);
+    
+    // 既に最上位の場合は何もしない
+    if (currentIndex >= siblings.length - 1) return;
+    
+    // 配列内での位置を変更
+    const globalIndex = layers.indexOf(layer);
+    const targetLayer = siblings[currentIndex + 1];
+    const targetGlobalIndex = layers.indexOf(targetLayer);
+    
+    // 入れ替え
+    layers.splice(globalIndex, 1);
+    layers.splice(targetGlobalIndex, 0, layer);
+    
+    updateLayerList();
+    render();
+    
+    // 履歴を保存
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+}
+
+// ===== レイヤーを下に移動（表示順で背面に） =====
+function moveLayerDown(layerId, event) {
+    if (event) event.stopPropagation();
+    
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    // 同じ親を持つレイヤー内での順序を変更
+    const siblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
+    const currentIndex = siblings.indexOf(layer);
+    
+    // 既に最下位の場合は何もしない
+    if (currentIndex <= 0) return;
+    
+    // 配列内での位置を変更
+    const globalIndex = layers.indexOf(layer);
+    const targetLayer = siblings[currentIndex - 1];
+    const targetGlobalIndex = layers.indexOf(targetLayer);
+    
+    // 入れ替え
+    layers.splice(globalIndex, 1);
+    layers.splice(targetGlobalIndex, 0, layer);
+    
+    updateLayerList();
+    render();
+    
+    // 履歴を保存
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
 }

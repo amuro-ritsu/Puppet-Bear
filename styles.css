@@ -366,7 +366,7 @@ body {
     min-height: 400px;
     height: 100%;
     overflow-y: auto;
-    padding-bottom: 1rem;
+    padding-bottom: 3rem;
 }
 
 .layer-item {
@@ -454,6 +454,38 @@ body {
 .layer-controls button:hover {
     background: var(--biscuit-dark);
     transform: scale(1.1);
+}
+
+/* レイヤー移動ボタン */
+.layer-move-btn {
+    background: linear-gradient(135deg, var(--chocolate-light), var(--biscuit-dark)) !important;
+    border: 1px solid var(--accent-gold) !important;
+    color: var(--biscuit-light) !important;
+    font-size: 0.85rem !important;
+    padding: 0.2rem 0.4rem !important;
+    min-width: 28px;
+    min-height: 28px;
+}
+
+.layer-move-btn:hover {
+    background: linear-gradient(135deg, var(--accent-gold), var(--biscuit-medium)) !important;
+    color: var(--chocolate-dark) !important;
+}
+
+/* タッチデバイス向けに移動ボタンを大きく */
+@media (pointer: coarse) {
+    .layer-move-btn {
+        min-width: 36px;
+        min-height: 36px;
+        font-size: 1rem !important;
+    }
+}
+
+/* レイヤー名ラベル（選択時に表示） */
+.layer-name-label {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
 }
 
 /* ===== プロパティパネル ===== */
@@ -1312,6 +1344,29 @@ canvas.eyedropper-active {
 * {
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
+}
+
+/* レイヤーアイテムのタッチ操作最適化 */
+.layer-item {
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+}
+
+/* タッチデバイスでのレイヤーアイテム長押し防止 */
+@media (pointer: coarse) {
+    .layer-item {
+        -webkit-touch-callout: none !important;
+    }
+    
+    .layer-controls {
+        gap: 0.3rem;
+    }
+    
+    .layer-controls button {
+        min-width: 36px;
+        min-height: 36px;
+    }
 }
 
 /* スクロールのスムーズ化 */
