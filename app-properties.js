@@ -306,6 +306,76 @@ function generateBlendModeUI(layer) {
     `;
 }
 
+// 色抜きクリッピングUI生成（共通関数）
+function generateColorClippingUI(layer) {
+    // colorClippingプロパティの初期化
+    if (!layer.colorClipping) {
+        layer.colorClipping = {
+            enabled: false,
+            referenceLayerId: null,
+            color: { r: 0, g: 255, b: 0 },
+            tolerance: 30,
+            invertClipping: false
+        };
+    }
+    
+    return `
+        <div class="property-group">
+            <h4>🎭 色抜きクリッピング</h4>
+            <label class="checkbox-label" style="display: flex; align-items: center; margin-bottom: 12px; cursor: pointer;">
+                <input type="checkbox" ${layer.colorClipping && layer.colorClipping.enabled ? 'checked' : ''} 
+                    onchange="toggleColorClipping(this.checked)">
+                <span style="margin-left: 8px; font-weight: bold;">色抜きクリッピングを有効化</span>
+            </label>
+            
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 11px; display: block; margin-bottom: 4px;">参照レイヤー</label>
+                <select id="colorClippingReferenceSelect" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 8px;">
+                    <option value="">なし</option>
+                </select>
+                <button onclick="setColorClippingReference()" style="width: 100%; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-bottom: 12px;">
+                    📌 参照レイヤーを設定
+                </button>
+            </div>
+            
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <div style="font-size: 11px; margin-bottom: 4px;">抽出色:</div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="width: 50px; height: 50px; border-radius: 4px; border: 2px solid var(--chocolate-dark); background: rgb(${layer.colorClipping ? layer.colorClipping.color.r : 0}, ${layer.colorClipping ? layer.colorClipping.color.g : 255}, ${layer.colorClipping ? layer.colorClipping.color.b : 0});"></div>
+                        <button onclick="activateColorClippingEyedropper()" style="padding: 10px 14px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; flex: 1;">
+                            🎨 スポイト
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                    許容値: <span id="colorClippingToleranceValue">${layer.colorClipping ? layer.colorClipping.tolerance : 30}</span>
+                </label>
+                <input type="range" class="property-slider" value="${layer.colorClipping ? layer.colorClipping.tolerance : 30}" 
+                    min="0" max="255" step="1"
+                    oninput="document.getElementById('colorClippingToleranceValue').textContent = this.value; setColorClippingTolerance(parseFloat(this.value))"
+                    onchange="setColorClippingTolerance(parseFloat(this.value))">
+            </div>
+            
+            <label class="checkbox-label" style="display: flex; align-items: center; margin-bottom: 12px; cursor: pointer;">
+                <input type="checkbox" ${layer.colorClipping && layer.colorClipping.invertClipping ? 'checked' : ''} 
+                    onchange="toggleColorClippingInvert(this.checked)">
+                <span style="margin-left: 8px; font-size: 11px;">色を反転（選択色以外にクリッピング）</span>
+            </label>
+            
+            <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
+                💡 参照レイヤーの指定色領域にクリッピング<br>
+                ① 参照レイヤーを選択<br>
+                ② スポイトで色を選択（省略時は全体にクリッピング）<br>
+                ③ 選択した色の範囲だけにクリッピング適用
+            </div>
+        </div>
+    `;
+}
+
 // 親子関係UI生成
 function generateParentUI(layer) {
     return `
@@ -433,59 +503,7 @@ function updatePropertiesPanel() {
         
         ${generateParentUI(layer)}
         
-        <div class="property-group">
-            <h4>🎭 色抜きクリッピング</h4>
-            <label class="checkbox-label" style="display: flex; align-items: center; margin-bottom: 12px; cursor: pointer;">
-                <input type="checkbox" ${layer.colorClipping && layer.colorClipping.enabled ? 'checked' : ''} 
-                    onchange="toggleColorClipping(this.checked)">
-                <span style="margin-left: 8px; font-weight: bold;">色抜きクリッピングを有効化</span>
-            </label>
-            
-            <div style="margin-bottom: 12px;">
-                <label style="font-size: 11px; display: block; margin-bottom: 4px;">参照レイヤー</label>
-                <select id="colorClippingReferenceSelect" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 8px;">
-                    <option value="">なし</option>
-                </select>
-                <button onclick="setColorClippingReference()" style="width: 100%; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-bottom: 12px;">
-                    📌 参照レイヤーを設定
-                </button>
-            </div>
-            
-            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
-                <div style="flex: 1;">
-                    <div style="font-size: 11px; margin-bottom: 4px;">抽出色:</div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <div style="width: 50px; height: 50px; border-radius: 4px; border: 2px solid var(--chocolate-dark); background: rgb(${layer.colorClipping ? layer.colorClipping.color.r : 0}, ${layer.colorClipping ? layer.colorClipping.color.g : 255}, ${layer.colorClipping ? layer.colorClipping.color.b : 0});"></div>
-                        <button onclick="activateColorClippingEyedropper()" style="padding: 10px 14px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; flex: 1;">
-                            🎨 スポイト
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="margin-bottom: 12px;">
-                <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                    許容値: <span id="colorClippingToleranceValue">${layer.colorClipping ? layer.colorClipping.tolerance : 30}</span>
-                </label>
-                <input type="range" class="property-slider" value="${layer.colorClipping ? layer.colorClipping.tolerance : 30}" 
-                    min="0" max="255" step="1"
-                    oninput="document.getElementById('colorClippingToleranceValue').textContent = this.value; setColorClippingTolerance(parseFloat(this.value))"
-                    onchange="setColorClippingTolerance(parseFloat(this.value))">
-            </div>
-            
-            <label class="checkbox-label" style="display: flex; align-items: center; margin-bottom: 12px; cursor: pointer;">
-                <input type="checkbox" ${layer.colorClipping && layer.colorClipping.invertClipping ? 'checked' : ''} 
-                    onchange="toggleColorClippingInvert(this.checked)">
-                <span style="margin-left: 8px; font-size: 11px;">色を反転（選択色以外にクリッピング）</span>
-            </label>
-            
-            <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
-                💡 参照レイヤーの指定色領域にクリッピング<br>
-                ① 参照レイヤーを選択<br>
-                ② スポイトで色を選択（省略時は全体にクリッピング）<br>
-                ③ 選択した色の範囲だけにクリッピング適用
-            </div>
-        </div>
+        ${generateColorClippingUI(layer)}
         
         ${generateWindSwayUI(layer)}
     `;
@@ -562,7 +580,14 @@ function updatePropertiesPanel() {
             ${generatePuppetFollowUI(layer)}
             
             ${generateParentUI(layer)}
+            
+            ${generateColorClippingUI(layer)}
         `;
+        
+        // 色抜きクリッピングの参照レイヤーセレクトを更新
+        if (typeof updateColorClippingReferenceSelect === 'function') {
+            updateColorClippingReferenceSelect(layer);
+        }
         
         clearPinElements();
         return;
@@ -618,7 +643,82 @@ function updatePropertiesPanel() {
             ${generatePuppetFollowUI(layer)}
             
             ${generateParentUI(layer)}
+            
+            ${generateColorClippingUI(layer)}
         `;
+        
+        // 色抜きクリッピングの参照レイヤーセレクトを更新
+        if (typeof updateColorClippingReferenceSelect === 'function') {
+            updateColorClippingReferenceSelect(layer);
+        }
+        
+        clearPinElements();
+        return;
+    }
+    
+    // 連番アニメレイヤーの場合
+    if (layer.type === 'sequence') {
+        // frameSkipの初期化
+        if (layer.frameSkip === undefined) {
+            layer.frameSkip = 0;
+        }
+        
+        propertiesPanel.innerHTML = `
+            <h3>🎞️ ${layer.name}</h3>
+            
+            ${generateTransformUI(layer)}
+            
+            ${generateBlendModeUI(layer)}
+            
+            <div class="property-group">
+                <h4>🎞️ 連番アニメ制御</h4>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                        連番画像: ${layer.sequenceImages ? layer.sequenceImages.length : 0}枚
+                    </label>
+                    <button onclick="reloadSequenceSequence(${layer.id})" style="width: 100%; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer;">📁 連番再読み込み</button>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                        FPS: <span id="sequenceFpsValue">${layer.fps || 12}</span>
+                    </label>
+                    <input type="range" class="property-slider" value="${layer.fps || 12}" 
+                        min="1" max="60" step="1"
+                        oninput="document.getElementById('sequenceFpsValue').textContent = this.value; updateLayerProperty('fps', parseInt(this.value))">
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                        コマ落とし: <span id="frameSkipValue">${layer.frameSkip || 0}</span> フレーム
+                    </label>
+                    <input type="range" class="property-slider" value="${layer.frameSkip || 0}" 
+                        min="0" max="10" step="1"
+                        oninput="document.getElementById('frameSkipValue').textContent = this.value; updateLayerProperty('frameSkip', parseInt(this.value))">
+                    <div style="font-size: 10px; color: var(--biscuit); margin-top: 4px;">
+                        0=通常再生 / 値を上げるほど早くなる
+                    </div>
+                </div>
+                
+                <div style="background: rgba(32, 178, 170, 0.2); padding: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
+                    💡 常にループ再生される連番アニメーションです<br>
+                    📌 コマ落としで再生速度を調整できます<br>
+                    例: コマ落とし2 → 1,4,7...と飛ばして再生
+                </div>
+            </div>
+            
+            ${generatePuppetFollowUI(layer)}
+            
+            ${generateParentUI(layer)}
+            
+            ${generateColorClippingUI(layer)}
+        `;
+        
+        // 色抜きクリッピングの参照レイヤーセレクトを更新
+        if (typeof updateColorClippingReferenceSelect === 'function') {
+            updateColorClippingReferenceSelect(layer);
+        }
         
         clearPinElements();
         return;

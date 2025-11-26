@@ -79,6 +79,13 @@ function updateLayerList() {
     blinkBtn.onclick = createBlinkLayer;
     buttonContainer.appendChild(blinkBtn);
     
+    // 連番アニメレイヤー追加ボタン
+    const sequenceBtn = document.createElement('button');
+    sequenceBtn.textContent = '🎞️ 連番アニメ追加';
+    sequenceBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #20b2aa, #008080); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
+    sequenceBtn.onclick = createSequenceLayer;
+    buttonContainer.appendChild(sequenceBtn);
+    
     // 揺れモーションレイヤー追加ボタン
     const bounceBtn = document.createElement('button');
     bounceBtn.textContent = '🎈 揺れモーション追加';
@@ -531,6 +538,7 @@ function getLayerTypeIcon(type) {
         case 'folder': return '📁';
         case 'lipsync': return '💬';
         case 'blink': return '👀';
+        case 'sequence': return '🎞️';
         case 'puppet': return '🎭';
         case 'bounce': return '🎈';
         case 'audio': return '🎵';
@@ -816,7 +824,16 @@ function createLipSyncLayer() {
                 
                 // 風揺れ機能（現在は非対応）
                 windSwayEnabled: false,
-                windSwayParams: getDefaultWindSwayParams()
+                windSwayParams: getDefaultWindSwayParams(),
+                
+                // 色抜きクリッピング
+                colorClipping: {
+                    enabled: false,
+                    referenceLayerId: null,
+                    color: { r: 0, g: 255, b: 0 },
+                    tolerance: 30,
+                    invertClipping: false
+                }
             };
             
             layers.push(layer);
@@ -871,7 +888,16 @@ function createBlinkLayer() {
                 
                 // 風揺れ機能（現在は非対応）
                 windSwayEnabled: false,
-                windSwayParams: getDefaultWindSwayParams()
+                windSwayParams: getDefaultWindSwayParams(),
+                
+                // 色抜きクリッピング
+                colorClipping: {
+                    enabled: false,
+                    referenceLayerId: null,
+                    color: { r: 0, g: 255, b: 0 },
+                    tolerance: 30,
+                    invertClipping: false
+                }
             };
             
             layers.push(layer);
@@ -880,6 +906,101 @@ function createBlinkLayer() {
             render();
             
             // 履歴を保存
+            if (typeof saveHistory === 'function') {
+                saveHistory();
+            }
+        });
+    };
+    input.click();
+}
+
+// ===== 連番アニメレイヤー作成 =====
+function createSequenceLayer() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.webkitdirectory = true; // フォルダ選択
+    input.onchange = (e) => {
+        const files = Array.from(e.target.files).filter(file => 
+            file.type.startsWith('image/')
+        );
+        
+        if (files.length < 2) {
+            alert('連番アニメレイヤーには少なくとも2枚の画像が必要です');
+            return;
+        }
+        
+        loadSequenceImages(files, (images) => {
+            const layer = {
+                id: nextLayerId++,
+                type: 'sequence',
+                name: '連番アニメ',
+                sequenceImages: images,
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                rotation: 0,
+                scale: 1,
+                opacity: 1.0,
+                anchorX: 0.5,
+                anchorY: 0.5,
+                visible: true,
+                blendMode: 'source-over',
+                fps: 12, // ループ再生FPS
+                frameSkip: 0, // コマ落とし（0=スキップなし）
+                
+                // パペット機能
+                parentLayerId: null,
+                
+                // 風揺れ機能（現在は非対応）
+                windSwayEnabled: false,
+                windSwayParams: getDefaultWindSwayParams(),
+                
+                // 色抜きクリッピング
+                colorClipping: {
+                    enabled: false,
+                    referenceLayerId: null,
+                    color: { r: 0, g: 255, b: 0 },
+                    tolerance: 30,
+                    invertClipping: false
+                }
+            };
+            
+            layers.push(layer);
+            updateLayerList();
+            selectLayer(layer.id, false);
+            render();
+            
+            // 履歴を保存
+            if (typeof saveHistory === 'function') {
+                saveHistory();
+            }
+        });
+    };
+    input.click();
+}
+
+// ===== 連番再読み込み（連番アニメ用） =====
+function reloadSequenceSequence(layerId) {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || layer.type !== 'sequence') return;
+    
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.webkitdirectory = true;
+    input.onchange = (e) => {
+        const files = Array.from(e.target.files).filter(file => 
+            file.type.startsWith('image/')
+        );
+        
+        if (files.length < 2) {
+            alert('連番アニメには少なくとも2枚の画像が必要です');
+            return;
+        }
+        
+        loadSequenceImages(files, (images) => {
+            layer.sequenceImages = images;
+            updatePropertiesPanel();
+            render();
+            
             if (typeof saveHistory === 'function') {
                 saveHistory();
             }

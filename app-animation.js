@@ -67,6 +67,16 @@ function stopPlayback() {
         updatePlayhead();
     }
     
+    // タイムラインのスクロール位置も先頭に戻す
+    const timeline = document.getElementById('timeline');
+    if (timeline) {
+        timeline.scrollLeft = 0;
+    }
+    const timelineLayers = document.getElementById('timeline-layers');
+    if (timelineLayers) {
+        timelineLayers.scrollLeft = 0;
+    }
+    
     render();
 }
 

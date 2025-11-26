@@ -148,6 +148,12 @@ function render() {
             return;
         }
         
+        // 連番アニメレイヤーは専用描画
+        if (layer.type === 'sequence') {
+            drawSequenceLayer(layer, localTime);
+            return;
+        }
+        
         // 揺れモーションレイヤーは専用描画
         if (layer.type === 'bounce') {
             drawBounceLayer(layer, localTime);
@@ -375,12 +381,18 @@ function drawLipSyncLayer(layer, time) {
     
     ctx.save();
     
+    // 親の変形を適用
+    applyParentTransform(layer);
+    
+    // 色抜きクリッピングを適用
+    const shouldClip = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
+    if (shouldClip) {
+        applyColorClipping(layer);
+    }
+    
     // 不透明度とブレンドモードを適用
     ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1.0;
     ctx.globalCompositeOperation = layer.blendMode || 'source-over';
-    
-    // 親の変形を適用
-    applyParentTransform(layer);
     
     // レイヤーの位置に移動
     ctx.translate(layer.x, layer.y);
@@ -475,12 +487,18 @@ function drawBlinkLayer(layer, time) {
     
     ctx.save();
     
+    // 親の変形を適用
+    applyParentTransform(layer);
+    
+    // 色抜きクリッピングを適用
+    const shouldClip = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
+    if (shouldClip) {
+        applyColorClipping(layer);
+    }
+    
     // 不透明度とブレンドモードを適用
     ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1.0;
     ctx.globalCompositeOperation = layer.blendMode || 'source-over';
-    
-    // 親の変形を適用
-    applyParentTransform(layer);
     
     // レイヤーの位置に移動
     ctx.translate(layer.x, layer.y);
@@ -559,6 +577,90 @@ function drawBlinkLayer(layer, time) {
     ctx.restore();
 }
 
+// ===== 連番アニメレイヤー描画 =====
+function drawSequenceLayer(layer, localTime) {
+    if (!layer.sequenceImages || layer.sequenceImages.length === 0) return;
+    
+    ctx.save();
+    
+    // 親の変形を適用
+    applyParentTransform(layer);
+    
+    // 色抜きクリッピングを適用
+    const shouldClip = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
+    if (shouldClip) {
+        applyColorClipping(layer);
+    }
+    
+    // ブレンドモード設定
+    ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+    ctx.globalAlpha = layer.opacity;
+    
+    // 現在の画像を取得
+    let currentImg = layer.sequenceImages[0];
+    let width = layer.sequenceImages[0].width;
+    let height = layer.sequenceImages[0].height;
+    
+    // 常にループ再生（コマ落とし対応）
+    const fps = layer.fps || 12;
+    const frameSkip = layer.frameSkip || 0; // 何フレームスキップするか
+    const skipInterval = frameSkip + 1; // 実際の間隔（例: frameSkip=2なら3フレームごと）
+    
+    // 時間からフレーム番号を計算
+    const totalFrameTime = localTime * fps; // FPSベースでのフレーム経過
+    const effectiveFrameIndex = Math.floor(totalFrameTime / skipInterval); // コマ落とし後のフレーム番号
+    
+    // 連番画像の数でループ
+    const seqIndex = effectiveFrameIndex % layer.sequenceImages.length;
+    currentImg = layer.sequenceImages[seqIndex];
+    
+    // アンカーポイント計算
+    const anchorX = layer.anchorX !== undefined ? layer.anchorX : 0.5;
+    const anchorY = layer.anchorY !== undefined ? layer.anchorY : 0.5;
+    const anchorOffsetX = width * anchorX;
+    const anchorOffsetY = height * anchorY;
+    
+    // 位置
+    ctx.translate(layer.x, layer.y);
+    
+    // 回転（アンカーポイントを中心に）
+    ctx.rotate(layer.rotation * Math.PI / 180);
+    
+    // スケール（アンカーポイントを中心に）
+    ctx.scale(layer.scale, layer.scale);
+    
+    // 画像を描画
+    ctx.drawImage(
+        currentImg,
+        -anchorOffsetX,
+        -anchorOffsetY,
+        width,
+        height
+    );
+    
+    // アンカーポイント表示 - 書き出し中は描画しない
+    if (typeof isExporting === 'undefined' || !isExporting) {
+        ctx.fillStyle = '#20b2aa';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.strokeStyle = '#20b2aa';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-25, 0);
+        ctx.lineTo(25, 0);
+        ctx.moveTo(0, -25);
+        ctx.lineTo(0, 25);
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
 // ===== 親の変形を適用 =====
 function applyParentTransform(layer) {
     // パペットアンカーに追従する場合
@@ -613,11 +715,11 @@ function applyParentTransform(layer) {
         return;
     }
     
-    // 画像レイヤー、口パク、まばたき、バウンスレイヤーの場合
+    // 画像レイヤー、口パク、まばたき、連番アニメ、バウンスレイヤーの場合
     let parentWidth, parentHeight;
     
-    if (parent.type === 'lipsync' || parent.type === 'blink') {
-        // 口パク・まばたきレイヤーの場合は最初の画像のサイズを使用
+    if (parent.type === 'lipsync' || parent.type === 'blink' || parent.type === 'sequence') {
+        // 口パク・まばたき・連番アニメレイヤーの場合は最初の画像のサイズを使用
         if (parent.sequenceImages && parent.sequenceImages.length > 0) {
             parentWidth = parent.sequenceImages[0].width;
             parentHeight = parent.sequenceImages[0].height;

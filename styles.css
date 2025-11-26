@@ -965,6 +965,49 @@ body {
     background: var(--bg-dark);
 }
 
+/* タブレット向けタイムラインスクロールバー */
+@media (pointer: coarse) {
+    .timeline {
+        /* スクロールバーを常に表示 */
+        scrollbar-width: auto;
+        scrollbar-color: var(--accent-gold) var(--chocolate-dark);
+        /* 下部に余白を確保してAndroidナビと重ならないように */
+        padding-bottom: 20px;
+    }
+    
+    .timeline::-webkit-scrollbar {
+        width: 14px;
+        height: 18px;
+    }
+    
+    .timeline::-webkit-scrollbar-track {
+        background: var(--chocolate-dark);
+        border-radius: 6px;
+    }
+    
+    .timeline::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, var(--accent-gold), var(--biscuit-medium));
+        border-radius: 8px;
+        border: 3px solid var(--chocolate-dark);
+        min-height: 50px;
+        min-width: 50px;
+    }
+    
+    .timeline::-webkit-scrollbar-thumb:hover,
+    .timeline::-webkit-scrollbar-thumb:active {
+        background: linear-gradient(135deg, var(--biscuit-light), var(--accent-gold));
+    }
+    
+    .timeline::-webkit-scrollbar-corner {
+        background: var(--chocolate-dark);
+    }
+    
+    /* タイムラインコンテナの下余白 */
+    .timeline-container {
+        padding-bottom: 10px;
+    }
+}
+
 .timeline-content {
     position: relative;
     height: 100%;
@@ -1535,6 +1578,15 @@ canvas.eyedropper-active {
         padding-left: env(safe-area-inset-left);
         padding-right: env(safe-area-inset-right);
         padding-bottom: env(safe-area-inset-bottom);
+    }
+    
+    /* タイムラインの下部余白（Androidナビバー対策） */
+    .timeline-container {
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    }
+    
+    .timeline {
+        margin-bottom: env(safe-area-inset-bottom);
     }
 }
 
