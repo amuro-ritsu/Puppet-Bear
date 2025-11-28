@@ -511,34 +511,83 @@ function drawBlinkLayer(layer, time) {
     // レイヤーの位置に移動
     ctx.translate(layer.x, layer.y);
     
-    // 現在表示すべき画像を決定
-    let currentImg = layer.sequenceImages[0]; // デフォルトは開いた目（最初のフレーム）
-    let width = layer.sequenceImages[0].width;
-    let height = layer.sequenceImages[0].height;
+    // 現在のフレーム番号を計算
+    const projectFps = typeof projectFPS !== "undefined" ? projectFPS : 30;
+    const currentFrame = Math.floor(time * projectFps);
+    const blinkFps = layer.fps || 12;
     
-    // 現在のフレーム番号を計算（30fps想定）
-    const currentFrame = Math.floor(time * (typeof projectFPS !== "undefined" ? projectFPS : 30));
+    // デフォルト表情（指定されていれば使う、なければ0）
+    let displayIndex = layer.useLastExpression ? (layer.lastExpressionIndex || 0) : 0;
     
-    // まばたきアニメーション中かチェック
+    // キーフレームを時間順にソート
     const sortedKeyframes = (layer.keyframes || []).slice().sort((a, b) => a.frame - b.frame);
     
-    for (const kf of sortedKeyframes) {
-        if (currentFrame >= kf.frame) {
-            const framesSinceStart = currentFrame - kf.frame;
-            const fps = layer.fps || 12;
-            const totalAnimFrames = (layer.sequenceImages.length - 1) * (30 / fps);
+    // まばたき中かどうかのフラグ
+    let isBlinking = false;
+    
+    // 現在アクティブなキーフレームを探す
+    for (let i = sortedKeyframes.length - 1; i >= 0; i--) {
+        const kf = sortedKeyframes[i];
+        if (currentFrame < kf.frame) continue;
+        
+        const framesSinceStart = currentFrame - kf.frame;
+        
+        // まばたきキーフレーム
+        if (kf.type === 'blink' || !kf.type) {
+            const totalAnimFrames = (layer.sequenceImages.length - 1) * (projectFps / blinkFps);
             
-            // まばたきアニメーションの長さ内ならアニメーション再生
             if (framesSinceStart < totalAnimFrames) {
-                const seqIndex = Math.floor(framesSinceStart * fps / 30);
+                // まばたきアニメーション中
+                const seqIndex = Math.floor(framesSinceStart * blinkFps / projectFps);
                 if (seqIndex < layer.sequenceImages.length - 1) {
-                    currentImg = layer.sequenceImages[seqIndex + 1]; // +1 で開いた目をスキップ
-                    width = currentImg.width;
-                    height = currentImg.height;
+                    displayIndex = seqIndex + 1; // +1で開いた目をスキップ
+                    isBlinking = true;
                 }
             }
+            // まばたきが終わった場合はデフォルト表情に戻る（displayIndexはそのまま）
+            break;
+        }
+        
+        // 表情キーフレーム
+        if (kf.type === 'expression') {
+            const startIndex = kf.startExpressionIndex !== undefined ? kf.startExpressionIndex : 0;
+            const targetIndex = kf.expressionIndex;
+            const steps = Math.abs(targetIndex - startIndex);
+            
+            console.log('🎭 表情遷移: frame=', currentFrame, 'kf.frame=', kf.frame, 'start=', startIndex, 'target=', targetIndex, 'steps=', steps, 'framesSince=', framesSinceStart);
+            
+            if (steps === 0) {
+                displayIndex = targetIndex;
+                console.log('🎭 steps=0, displayIndex=', displayIndex);
+            } else {
+                const direction = targetIndex > startIndex ? 1 : -1;
+                const framesPerStep = Math.max(1, Math.round(projectFps / blinkFps));
+                const totalAnimFrames = steps * framesPerStep;
+                
+                console.log('🎭 direction=', direction, 'framesPerStep=', framesPerStep, 'totalAnimFrames=', totalAnimFrames);
+                
+                if (framesSinceStart >= totalAnimFrames) {
+                    // 遷移完了
+                    displayIndex = targetIndex;
+                    console.log('🎭 遷移完了, displayIndex=', displayIndex);
+                } else {
+                    // 遷移中
+                    const stepIndex = Math.floor(framesSinceStart / framesPerStep);
+                    displayIndex = startIndex + (direction * Math.min(stepIndex + 1, steps));
+                    console.log('🎭 遷移中, stepIndex=', stepIndex, 'displayIndex=', displayIndex);
+                }
+            }
+            break;
         }
     }
+    
+    // インデックスを範囲内に収める
+    displayIndex = Math.max(0, Math.min(displayIndex, layer.sequenceImages.length - 1));
+    
+    // 表示する画像
+    const currentImg = layer.sequenceImages[displayIndex];
+    const width = currentImg.width;
+    const height = currentImg.height;
     
     // アンカーポイントのオフセット
     const anchorOffsetX = layer.anchorX * width;

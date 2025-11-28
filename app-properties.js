@@ -599,6 +599,32 @@ function updatePropertiesPanel() {
     
     // まばたきレイヤーの場合
     if (layer.type === 'blink') {
+        // キーフレームリスト生成用関数
+        const generateKeyframeList = (keyframes) => {
+            return (keyframes || []).slice().sort((a, b) => a.frame - b.frame).map((kf, i) => {
+                if (kf.type === 'expression') {
+                    const startIdx = kf.startExpressionIndex !== undefined ? kf.startExpressionIndex + 1 : '?';
+                    const endIdx = kf.expressionIndex + 1;
+                    const direction = kf.startExpressionIndex !== undefined 
+                        ? (kf.expressionIndex > kf.startExpressionIndex ? '→' : '←')
+                        : '→';
+                    return `
+                        <div style="display: flex; gap: 8px; align-items: center; padding: 4px; background: rgba(95, 168, 211, 0.3); border-radius: 4px; margin-bottom: 4px; border-left: 3px solid #5fa8d3;">
+                            <span style="flex: 1; font-size: 11px;">😊 ${startIdx} ${direction} ${endIdx}: ${kf.frame}f</span>
+                            <button onclick="removeBlinkKeyframe(${layer.id}, ${i})" style="padding: 2px 6px; background: var(--chocolate-dark); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">削除</button>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div style="display: flex; gap: 8px; align-items: center; padding: 4px; background: rgba(135, 206, 235, 0.2); border-radius: 4px; margin-bottom: 4px;">
+                            <span style="flex: 1; font-size: 11px;">👀 まばたき: ${kf.frame}f</span>
+                            <button onclick="removeBlinkKeyframe(${layer.id}, ${i})" style="padding: 2px 6px; background: var(--chocolate-dark); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">削除</button>
+                        </div>
+                    `;
+                }
+            }).join('');
+        };
+        
         propertiesPanel.innerHTML = `
             <h3>👀 ${layer.name}</h3>
             
@@ -628,12 +654,7 @@ function updatePropertiesPanel() {
                 <div style="margin-bottom: 12px;">
                     <h5 style="margin: 8px 0;">キーフレーム</h5>
                     <div id="blink-keyframe-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 8px;">
-                        ${(layer.keyframes || []).sort((a, b) => a.frame - b.frame).map((kf, i) => `
-                            <div style="display: flex; gap: 8px; align-items: center; padding: 4px; background: rgba(135, 206, 235, 0.2); border-radius: 4px; margin-bottom: 4px;">
-                                <span style="flex: 1; font-size: 11px;">👀 まばたき: ${kf.frame}f</span>
-                                <button onclick="removeBlinkKeyframe(${layer.id}, ${i})" style="padding: 2px 6px; background: var(--chocolate-dark); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">削除</button>
-                            </div>
-                        `).join('')}
+                        ${generateKeyframeList(layer.keyframes)}
                     </div>
                     <button onclick="addBlinkKeyframe(${layer.id})" style="width: 100%; padding: 8px; background: linear-gradient(135deg, #87ceeb, #4682b4); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">👀 まばたき挿入</button>
                 </div>
@@ -644,12 +665,19 @@ function updatePropertiesPanel() {
                 </div>
             </div>
             
+            ${typeof generateBlinkExpressionUI === 'function' ? generateBlinkExpressionUI(layer) : ''}
+            
             ${generatePuppetFollowUI(layer)}
             
             ${generateParentUI(layer)}
             
             ${generateColorClippingUI(layer)}
         `;
+        
+        // 表情プレビューの初期化
+        if (typeof initExpressionPreview === 'function') {
+            initExpressionPreview(layer);
+        }
         
         // 色抜きクリッピングの参照レイヤーセレクトを更新
         if (typeof updateColorClippingReferenceSelect === 'function') {

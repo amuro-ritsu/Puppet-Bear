@@ -205,6 +205,53 @@ function isPointInLayer(mouseX, mouseY, layer) {
         return true;
     }
     
+    // まばたき・連番・リップシンクレイヤーの場合
+    if (layer.type === 'blink' || layer.type === 'sequence' || layer.type === 'lipsync') {
+        // sequenceImagesがある場合は最初の画像のサイズを使用
+        if (layer.sequenceImages && layer.sequenceImages.length > 0) {
+            const img = layer.sequenceImages[0];
+            const tempWidth = layer.width || img.width;
+            const tempHeight = layer.height || img.height;
+            
+            const anchorOffsetX = (layer.anchorX || 0.5) * tempWidth;
+            const anchorOffsetY = (layer.anchorY || 0.5) * tempHeight;
+            
+            const layerCenterX = layer.x;
+            const layerCenterY = layer.y;
+            
+            const rad = -(layer.rotation || 0) * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            
+            const offsetX = mouseX - layerCenterX;
+            const offsetY = mouseY - layerCenterY;
+            
+            const localX = offsetX * cos - offsetY * sin;
+            const localY = offsetX * sin + offsetY * cos;
+            
+            const scale = layer.scale || 1;
+            const scaledWidth = tempWidth * scale;
+            const scaledHeight = tempHeight * scale;
+            const margin = 200;
+            
+            const scaledAnchorOffsetX = anchorOffsetX * scale;
+            const scaledAnchorOffsetY = anchorOffsetY * scale;
+            
+            const left = -scaledAnchorOffsetX - margin;
+            const right = (scaledWidth - scaledAnchorOffsetX) + margin;
+            const top = -scaledAnchorOffsetY - margin;
+            const bottom = (scaledHeight - scaledAnchorOffsetY) + margin;
+            
+            return localX >= left && localX <= right && localY >= top && localY <= bottom;
+        }
+        return true;
+    }
+    
+    // 通常レイヤーでwidthとheightがなければスキップ
+    if (!layer.width || !layer.height) {
+        return false;
+    }
+    
     // アンカーポイントのオフセット
     const anchorOffsetX = layer.anchorX * layer.width;
     const anchorOffsetY = layer.anchorY * layer.height;
