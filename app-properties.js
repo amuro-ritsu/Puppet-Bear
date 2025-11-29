@@ -408,11 +408,47 @@ function updatePropertiesPanel() {
     
     // 複数選択時
     if (selectedLayerIds.length > 1) {
+        // 選択されたレイヤーを取得
+        const selectedLayers = layers.filter(l => selectedLayerIds.includes(l.id));
+        
+        // 親レイヤー候補を取得（選択中のレイヤーとその子孫を除外）
+        const availableParents = layers.filter(l => {
+            // 選択中のレイヤー自身は除外
+            if (selectedLayerIds.includes(l.id)) return false;
+            // フォルダ・ジャンプフォルダ・音声は親になれない（フォルダは内部処理が違う）
+            if (l.type === 'jumpFolder' || l.type === 'audio') return false;
+            // 選択中レイヤーの子孫も除外（循環防止）
+            for (const selId of selectedLayerIds) {
+                if (isDescendantOf(l.id, selId)) return false;
+            }
+            return true;
+        });
+        
+        // 現在の共通親を取得（すべて同じ親なら表示）
+        const parentIds = [...new Set(selectedLayers.map(l => l.parentLayerId))];
+        const commonParentId = parentIds.length === 1 ? parentIds[0] : null;
+        
         propertiesPanel.innerHTML = `
             <h3>複数選択 (${selectedLayerIds.length}個)</h3>
+            
+            <div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.1); border-radius: 8px;">
+                <label style="font-size: 11px; display: block; margin-bottom: 8px;">🔗 親レイヤー一括設定:</label>
+                <select id="multi-parent-select" style="width: 100%; padding: 8px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
+                    <option value="" ${!commonParentId ? 'selected' : ''}>なし（ルート）</option>
+                    ${availableParents.map(l => {
+                        const icon = l.type === 'folder' ? '📁' : (l.type === 'image' ? '🖼️' : '📄');
+                        return `<option value="${l.id}" ${l.id === commonParentId ? 'selected' : ''}>${icon} ${l.name}</option>`;
+                    }).join('')}
+                </select>
+                <button onclick="applyMultiParent()" style="width: 100%; margin-top: 8px; padding: 8px; background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange)); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    ✅ 親を一括設定
+                </button>
+                ${parentIds.length > 1 ? '<small style="display: block; margin-top: 6px; color: var(--biscuit-light);">※ 現在異なる親が設定されています</small>' : ''}
+            </div>
+            
             <p style="color: var(--biscuit-light); margin-top: 16px;">
                 💡 複数のレイヤーが選択されています<br>
-                フォルダ作成ボタンでまとめることができます
+                フォルダ作成ボタンでまとめることもできます
             </p>
         `;
         clearPinElements();
@@ -2957,4 +2993,48 @@ function insertWindSwayKeyframe() {
             btn.style.background = 'linear-gradient(135deg, var(--accent-gold), var(--accent-orange))';
         }, 1000);
     }
+}
+
+// ===== 複数選択時の親レイヤー一括設定 =====
+function applyMultiParent() {
+    const select = document.getElementById('multi-parent-select');
+    if (!select) return;
+    
+    const newParentId = select.value ? parseInt(select.value) : null;
+    
+    // 選択されたすべてのレイヤーに親を設定
+    selectedLayerIds.forEach(layerId => {
+        const layer = layers.find(l => l.id === layerId);
+        if (!layer) return;
+        
+        // 自分自身を親にはできない
+        if (newParentId === layerId) return;
+        
+        // 循環参照チェック
+        if (newParentId && isDescendantOf(newParentId, layerId)) return;
+        
+        // 親レイヤーを設定（位置補正なしでシンプルに）
+        layer.parentLayerId = newParentId;
+    });
+    
+    // UI更新
+    updateLayerList();
+    updatePropertiesPanel();
+    if (typeof updateTimeline === 'function') {
+        updateTimeline();
+    }
+    render();
+    
+    console.log(`[MultiParent] ${selectedLayerIds.length}個のレイヤーに親ID ${newParentId} を設定`);
+}
+
+// ===== 子孫チェック（循環参照防止用） =====
+function isDescendantOf(layerId, potentialAncestorId) {
+    // layerIdがpotentialAncestorIdの子孫かどうかをチェック
+    const children = layers.filter(l => l.parentLayerId === potentialAncestorId);
+    for (const child of children) {
+        if (child.id === layerId) return true;
+        if (isDescendantOf(layerId, child.id)) return true;
+    }
+    return false;
 }
