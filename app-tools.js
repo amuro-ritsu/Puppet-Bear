@@ -139,8 +139,8 @@ function handleCanvasMouseMove(e) {
         let anchorScreenX = layer.x;
         let anchorScreenY = layer.y;
         
-        // フォルダの場合はanchorOffsetを加算
-        if (layer.type === 'folder') {
+        // フォルダまたはジャンプフォルダーの場合はanchorOffsetを加算
+        if (layer.type === 'folder' || layer.type === 'jumpFolder') {
             anchorScreenX += (layer.anchorOffsetX || 0);
             anchorScreenY += (layer.anchorOffsetY || 0);
         }
@@ -200,56 +200,9 @@ function handleCanvasMouseUp(e) {
 
 // ===== レイヤー内の点判定 =====
 function isPointInLayer(mouseX, mouseY, layer) {
-    // フォルダの場合は常にtrueを返す（キャンバスのどこでも操作可能）
-    if (layer.type === 'folder') {
+    // フォルダまたはジャンプフォルダーの場合は常にtrueを返す（キャンバスのどこでも操作可能）
+    if (layer.type === 'folder' || layer.type === 'jumpFolder') {
         return true;
-    }
-    
-    // まばたき・連番・リップシンクレイヤーの場合
-    if (layer.type === 'blink' || layer.type === 'sequence' || layer.type === 'lipsync') {
-        // sequenceImagesがある場合は最初の画像のサイズを使用
-        if (layer.sequenceImages && layer.sequenceImages.length > 0) {
-            const img = layer.sequenceImages[0];
-            const tempWidth = layer.width || img.width;
-            const tempHeight = layer.height || img.height;
-            
-            const anchorOffsetX = (layer.anchorX || 0.5) * tempWidth;
-            const anchorOffsetY = (layer.anchorY || 0.5) * tempHeight;
-            
-            const layerCenterX = layer.x;
-            const layerCenterY = layer.y;
-            
-            const rad = -(layer.rotation || 0) * Math.PI / 180;
-            const cos = Math.cos(rad);
-            const sin = Math.sin(rad);
-            
-            const offsetX = mouseX - layerCenterX;
-            const offsetY = mouseY - layerCenterY;
-            
-            const localX = offsetX * cos - offsetY * sin;
-            const localY = offsetX * sin + offsetY * cos;
-            
-            const scale = layer.scale || 1;
-            const scaledWidth = tempWidth * scale;
-            const scaledHeight = tempHeight * scale;
-            const margin = 200;
-            
-            const scaledAnchorOffsetX = anchorOffsetX * scale;
-            const scaledAnchorOffsetY = anchorOffsetY * scale;
-            
-            const left = -scaledAnchorOffsetX - margin;
-            const right = (scaledWidth - scaledAnchorOffsetX) + margin;
-            const top = -scaledAnchorOffsetY - margin;
-            const bottom = (scaledHeight - scaledAnchorOffsetY) + margin;
-            
-            return localX >= left && localX <= right && localY >= top && localY <= bottom;
-        }
-        return true;
-    }
-    
-    // 通常レイヤーでwidthとheightがなければスキップ
-    if (!layer.width || !layer.height) {
-        return false;
     }
     
     // アンカーポイントのオフセット
@@ -271,8 +224,8 @@ function isPointInLayer(mouseX, mouseY, layer) {
         const parent = layers.find(l => l.id === currentLayer.parentLayerId);
         if (!parent) break;
         
-        // フォルダの場合（widthとheightがないので簡略化）
-        if (parent.type === 'folder') {
+        // フォルダまたはジャンプフォルダーの場合（widthとheightがないので簡略化）
+        if (parent.type === 'folder' || parent.type === 'jumpFolder') {
             // 親のスケールを適用
             let relX = worldX * parent.scale;
             let relY = worldY * parent.scale;

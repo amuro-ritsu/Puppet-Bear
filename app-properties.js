@@ -23,7 +23,7 @@ function generateLayerTypeUI(layer) {
     const types = [
         { value: 'image', label: '🖼️ 画像', desc: '通常の画像レイヤー' },
         { value: 'puppet', label: '🎭 パペット', desc: 'ハンドル操作で動かせる' },
-        { value: 'bounce', label: '🎈 揺れモーション', desc: '自動で揺れるアニメ' }
+        { value: 'bounce', label: '🎈 弾みレイヤー', desc: '上下に弾むアニメ' }
     ];
     
     return `
@@ -129,7 +129,7 @@ function getLayerTypeName(type) {
     switch (type) {
         case 'image': return '画像';
         case 'puppet': return 'パペット';
-        case 'bounce': return '揺れモーション';
+        case 'bounce': return '弾みレイヤー';
         case 'folder': return 'フォルダ';
         case 'lipsync': return '口パク';
         case 'blink': return 'まばたき';
@@ -141,20 +141,21 @@ function getLayerTypeName(type) {
 // ヘッダーツールバーの更新
 function updateHeaderToolbar() {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    const toolbar = document.getElementById('header-toolbar');
     const anchorSliders = document.getElementById('header-anchor-sliders');
     
-    if (!toolbar) return;
-    
-    // レイヤーが選択されていない場合は非表示
+    // レイヤーが選択されていない場合
     if (!layer) {
-        toolbar.style.opacity = '0.5';
-        toolbar.style.pointerEvents = 'none';
+        if (anchorSliders) {
+            anchorSliders.style.opacity = '0.5';
+            anchorSliders.style.pointerEvents = 'none';
+        }
         return;
     }
     
-    toolbar.style.opacity = '1';
-    toolbar.style.pointerEvents = 'auto';
+    if (anchorSliders) {
+        anchorSliders.style.opacity = '1';
+        anchorSliders.style.pointerEvents = 'auto';
+    }
     
     // ツールボタンの状態更新
     const rotBtn = document.getElementById('header-tool-rotation');
@@ -167,9 +168,9 @@ function updateHeaderToolbar() {
         posBtn.classList.toggle('active', currentTool === 'position');
     }
     
-    // フォルダの場合はスライダーを非表示（ピクセルオフセットなので0-100%では表現不可）
+    // フォルダやジャンプフォルダーの場合はスライダーを非表示（ピクセルオフセットなので0-100%では表現不可）
     if (anchorSliders) {
-        if (layer.type === 'folder') {
+        if (layer.type === 'folder' || layer.type === 'jumpFolder') {
             anchorSliders.style.display = 'none';
         } else {
             anchorSliders.style.display = 'flex';
@@ -177,16 +178,21 @@ function updateHeaderToolbar() {
             // アンカースライダーの値を更新
             const anchorX = layer.anchorX !== undefined ? layer.anchorX : 0.5;
             const anchorY = layer.anchorY !== undefined ? layer.anchorY : 0.5;
+            const anchorRotation = layer.anchorRotation !== undefined ? layer.anchorRotation : 0;
             
             const xSlider = document.getElementById('header-anchor-x-slider');
             const ySlider = document.getElementById('header-anchor-y-slider');
+            const rotSlider = document.getElementById('header-anchor-rot-slider');
             const xLabel = document.getElementById('headerAnchorX');
             const yLabel = document.getElementById('headerAnchorY');
+            const rotLabel = document.getElementById('headerAnchorRot');
             
             if (xSlider) xSlider.value = Math.round(anchorX * 100);
             if (ySlider) ySlider.value = Math.round(anchorY * 100);
+            if (rotSlider) rotSlider.value = Math.round(anchorRotation);
             if (xLabel) xLabel.textContent = Math.round(anchorX * 100);
             if (yLabel) yLabel.textContent = Math.round(anchorY * 100);
+            if (rotLabel) rotLabel.textContent = Math.round(anchorRotation);
         }
     }
 }
@@ -386,7 +392,7 @@ function generateParentUI(layer) {
                     style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
                     <option value="">なし</option>
                     ${layers.filter(l => l.id !== layer.id).map(l => {
-                        const icon = l.type === 'folder' ? '📁' : (l.type === 'puppet' ? '🎭' : '🖼️');
+                        const icon = l.type === 'folder' ? '📁' : (l.type === 'jumpFolder' ? '🦘' : (l.type === 'puppet' ? '🎭' : '🖼️'));
                         return `<option value="${l.id}" ${l.id === layer.parentLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
                     }).join('')}
                 </select>
@@ -441,6 +447,162 @@ function updatePropertiesPanel() {
         clearPuppetAnchorElements();
     }
     
+    // ジャンプフォルダーの場合
+    if (layer.type === 'jumpFolder') {
+        // ジャンプパラメータの初期化チェック
+        if (!layer.jumpParams) {
+            layer.jumpParams = getDefaultJumpParams();
+        }
+        if (layer.jumpParams.loop === undefined) {
+            layer.jumpParams.loop = false;
+        }
+        if (!layer.jumpParams.loopPeriod) {
+            layer.jumpParams.loopPeriod = 1.0;
+        }
+        if (!layer.jumpParams.keyframes) {
+            layer.jumpParams.keyframes = [];
+        }
+        
+        const jp = layer.jumpParams;
+        
+        // 親レイヤー候補（自分自身と子孫を除外）
+        const availableParents = layers.filter(l => {
+            if (l.id === layer.id) return false;
+            if (isDescendantOf(l.id, layer.id)) return false;
+            return true;
+        });
+        
+        // フォルダ内のレイヤー（直接の子）を取得
+        const childLayers = layers.filter(l => l.parentLayerId === layer.id && l.type !== 'folder' && l.type !== 'jumpFolder' && l.type !== 'audio');
+        
+        propertiesPanel.innerHTML = `
+            <h3>🦘 ${layer.name}</h3>
+            
+            ${generateTransformUI(layer)}
+            
+            ${generateBlendModeUI(layer)}
+            
+            <div class="property-group">
+                <h4>⚓ アンカー基準</h4>
+                <label style="font-size: 11px; display: block; margin-bottom: 4px;">基準レイヤー:</label>
+                <select id="folder-anchor-ref" onchange="updateFolderAnchorReference(this.value)" 
+                    style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
+                    <option value="">なし（フォルダ位置）</option>
+                    ${childLayers.map(l => {
+                        const icon = getLayerTypeIcon ? getLayerTypeIcon(l.type) : '🖼️';
+                        return `<option value="${l.id}" ${l.id === layer.anchorReferenceLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
+                    }).join('')}
+                </select>
+                <div style="background: rgba(70, 130, 180, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
+                    💡 選択したレイヤーのアンカーポイントを<br>フォルダの回転・スケール基準にします
+                </div>
+            </div>
+            
+            <div class="property-group">
+                <h4>🔗 親子関係</h4>
+                <label style="font-size: 11px; display: block; margin-bottom: 4px;">親レイヤー:</label>
+                <select id="prop-parent" onchange="updateFolderParent(this.value)" 
+                    style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
+                    <option value="">なし</option>
+                    ${availableParents.map(l => {
+                        const icon = l.type === 'folder' ? '📁' : (l.type === 'jumpFolder' ? '🦘' : (l.type === 'puppet' ? '🎭' : '🖼️'));
+                        return `<option value="${l.id}" ${l.id === layer.parentLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
+                    }).join('')}
+                </select>
+            </div>
+            
+            <div class="property-group">
+                <h4>🦘 ジャンプ制御</h4>
+                
+                <div style="background: rgba(50, 205, 50, 0.15); padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 3px solid #32cd32;">
+                    <div style="font-size: 11px; color: var(--biscuit-light);">
+                        ⭐ <strong>このフォルダ内、または親子付けしたレイヤーがジャンプします</strong><br>
+                        🎯 変形なし・位置のみ移動
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">ジャンプ方向</label>
+                    <select id="jump-direction-select" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;" onchange="updateJumpParam('direction', this.value)">
+                        <option value="up" ${(jp.direction || 'up') === 'up' ? 'selected' : ''}>⬆️ 上（ジャンプ）</option>
+                        <option value="down" ${jp.direction === 'down' ? 'selected' : ''}>⬇️ 下（落下）</option>
+                        <option value="left" ${jp.direction === 'left' ? 'selected' : ''}>⬅️ 左</option>
+                        <option value="right" ${jp.direction === 'right' ? 'selected' : ''}>➡️ 右</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                        ジャンプの大きさ: <span id="jumpAmplitudeValue">${jp.amplitude}</span>px
+                    </label>
+                    <input type="range" class="property-slider" id="jump-amplitude" value="${jp.amplitude}" 
+                        min="10" max="300" step="5"
+                        oninput="document.getElementById('jumpAmplitudeValue').textContent = this.value + 'px'; updateJumpParam('amplitude', parseInt(this.value))">
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                        揺れる回数: <span id="jumpFrequencyValue">${jp.frequency}</span>回
+                    </label>
+                    <input type="range" class="property-slider" id="jump-frequency" value="${jp.frequency}" 
+                        min="1" max="10" step="1"
+                        oninput="document.getElementById('jumpFrequencyValue').textContent = this.value + '回'; updateJumpParam('frequency', parseInt(this.value))">
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                        減衰時間: <span id="jumpDampingValue">${jp.dampingTime.toFixed(2)}</span>秒
+                    </label>
+                    <input type="range" class="property-slider" id="jump-damping" value="${jp.dampingTime}" 
+                        min="0.1" max="5.0" step="0.1"
+                        oninput="document.getElementById('jumpDampingValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateJumpParam('dampingTime', parseFloat(this.value))">
+                </div>
+                
+                <!-- ループモード設定 -->
+                <div style="margin-bottom: 12px; padding: 12px; background: ${jp.loop ? 'rgba(0, 255, 128, 0.15)' : 'rgba(50, 205, 50, 0.1)'}; border-radius: 8px; border: 1px solid ${jp.loop ? 'rgba(0, 255, 128, 0.5)' : 'var(--border-color)'};">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: bold;">
+                        <input type="checkbox" id="jump-loop-checkbox" ${jp.loop ? 'checked' : ''} 
+                            onchange="updateJumpLoop(this.checked)"
+                            style="width: 18px; height: 18px; cursor: pointer;">
+                        <span>🔄 ループ再生（減衰なし）</span>
+                    </label>
+                    <div id="jump-loop-period-control" style="margin-top: 10px; display: ${jp.loop ? 'block' : 'none'};">
+                        <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                            ループ周期: <span id="jumpLoopPeriodValue">${(jp.loopPeriod || 1.0).toFixed(2)}</span>秒
+                        </label>
+                        <input type="range" class="property-slider" id="jump-loop-period" value="${jp.loopPeriod || 1.0}" 
+                            min="0.1" max="5.0" step="0.1"
+                            oninput="document.getElementById('jumpLoopPeriodValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateJumpParam('loopPeriod', parseFloat(this.value))">
+                        <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 1往復にかかる時間</small>
+                    </div>
+                    <div style="font-size: 10px; color: ${jp.loop ? '#00ff80' : 'var(--biscuit-light)'}; margin-top: 8px;">
+                        ${jp.loop ? '✅ キーフレーム不要で常にジャンプ' : '💡 チェックすると減衰なしで永続ループ'}
+                    </div>
+                </div>
+                
+                <div id="jump-keyframe-section" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: ${jp.loop ? 'none' : 'block'};">
+                    <h5 style="margin: 8px 0;">キーフレーム（ジャンプ開始点）</h5>
+                    <button onclick="addJumpKeyframe()" style="width: 100%; padding: 8px; background: linear-gradient(135deg, #32cd32, #228b22); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🎬 現在位置に挿入</button>
+                    <div id="jump-keyframe-list" style="margin-top: 8px; max-height: 200px; overflow-y: auto;"></div>
+                </div>
+                
+                <div style="background: rgba(50, 205, 50, 0.2); padding: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
+                    🦘 <strong>ジャンプ</strong> = 位置のみ移動（変形なし）<br>
+                    ↕️↔️ <strong>方向</strong> = 上下左右から選択<br>
+                    🔄 <strong>ループ</strong> = 減衰なしで永続的にジャンプ<br>
+                    📁 <strong>フォルダ内</strong> or <strong>親子付け</strong>で適用
+                </div>
+            </div>
+            
+            ${typeof generateWiggleUI === 'function' ? generateWiggleUI(layer) : ''}
+        `;
+        
+        // キーフレームリストを更新
+        updateJumpKeyframeList();
+        clearPinElements();
+        return;
+    }
+    
     // フォルダの場合
     if (layer.type === 'folder') {
         // フォルダ同士の親子関係用 - 自分自身とその子孫を除外
@@ -451,6 +613,9 @@ function updatePropertiesPanel() {
             return true;
         });
         
+        // フォルダ内のレイヤー（直接の子）を取得
+        const childLayers = layers.filter(l => l.parentLayerId === layer.id && l.type !== 'folder' && l.type !== 'jumpFolder' && l.type !== 'audio');
+        
         propertiesPanel.innerHTML = `
             <h3>📁 ${layer.name}</h3>
             
@@ -459,13 +624,29 @@ function updatePropertiesPanel() {
             ${generateBlendModeUI(layer)}
             
             <div class="property-group">
+                <h4>⚓ アンカー基準</h4>
+                <label style="font-size: 11px; display: block; margin-bottom: 4px;">基準レイヤー:</label>
+                <select id="folder-anchor-ref" onchange="updateFolderAnchorReference(this.value)" 
+                    style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
+                    <option value="">なし（フォルダ位置）</option>
+                    ${childLayers.map(l => {
+                        const icon = getLayerTypeIcon ? getLayerTypeIcon(l.type) : '🖼️';
+                        return `<option value="${l.id}" ${l.id === layer.anchorReferenceLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
+                    }).join('')}
+                </select>
+                <div style="background: rgba(70, 130, 180, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
+                    💡 選択したレイヤーのアンカーポイントを<br>フォルダの回転・スケール基準にします
+                </div>
+            </div>
+            
+            <div class="property-group">
                 <h4>🔗 親子関係</h4>
                 <label style="font-size: 11px; display: block; margin-bottom: 4px;">親レイヤー:</label>
                 <select id="prop-parent" onchange="updateFolderParent(this.value)" 
                     style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
                     <option value="">なし</option>
                     ${availableParents.map(l => {
-                        const icon = l.type === 'folder' ? '📁' : (l.type === 'puppet' ? '🎭' : '🖼️');
+                        const icon = l.type === 'folder' ? '📁' : (l.type === 'jumpFolder' ? '🦘' : (l.type === 'puppet' ? '🎭' : '🖼️'));
                         return `<option value="${l.id}" ${l.id === layer.parentLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
                     }).join('')}
                 </select>
@@ -599,32 +780,6 @@ function updatePropertiesPanel() {
     
     // まばたきレイヤーの場合
     if (layer.type === 'blink') {
-        // キーフレームリスト生成用関数
-        const generateKeyframeList = (keyframes) => {
-            return (keyframes || []).slice().sort((a, b) => a.frame - b.frame).map((kf, i) => {
-                if (kf.type === 'expression') {
-                    const startIdx = kf.startExpressionIndex !== undefined ? kf.startExpressionIndex + 1 : '?';
-                    const endIdx = kf.expressionIndex + 1;
-                    const direction = kf.startExpressionIndex !== undefined 
-                        ? (kf.expressionIndex > kf.startExpressionIndex ? '→' : '←')
-                        : '→';
-                    return `
-                        <div style="display: flex; gap: 8px; align-items: center; padding: 4px; background: rgba(95, 168, 211, 0.3); border-radius: 4px; margin-bottom: 4px; border-left: 3px solid #5fa8d3;">
-                            <span style="flex: 1; font-size: 11px;">😊 ${startIdx} ${direction} ${endIdx}: ${kf.frame}f</span>
-                            <button onclick="removeBlinkKeyframe(${layer.id}, ${i})" style="padding: 2px 6px; background: var(--chocolate-dark); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">削除</button>
-                        </div>
-                    `;
-                } else {
-                    return `
-                        <div style="display: flex; gap: 8px; align-items: center; padding: 4px; background: rgba(135, 206, 235, 0.2); border-radius: 4px; margin-bottom: 4px;">
-                            <span style="flex: 1; font-size: 11px;">👀 まばたき: ${kf.frame}f</span>
-                            <button onclick="removeBlinkKeyframe(${layer.id}, ${i})" style="padding: 2px 6px; background: var(--chocolate-dark); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">削除</button>
-                        </div>
-                    `;
-                }
-            }).join('');
-        };
-        
         propertiesPanel.innerHTML = `
             <h3>👀 ${layer.name}</h3>
             
@@ -654,7 +809,12 @@ function updatePropertiesPanel() {
                 <div style="margin-bottom: 12px;">
                     <h5 style="margin: 8px 0;">キーフレーム</h5>
                     <div id="blink-keyframe-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 8px;">
-                        ${generateKeyframeList(layer.keyframes)}
+                        ${(layer.keyframes || []).sort((a, b) => a.frame - b.frame).map((kf, i) => `
+                            <div style="display: flex; gap: 8px; align-items: center; padding: 4px; background: rgba(135, 206, 235, 0.2); border-radius: 4px; margin-bottom: 4px;">
+                                <span style="flex: 1; font-size: 11px;">👀 まばたき: ${kf.frame}f</span>
+                                <button onclick="removeBlinkKeyframe(${layer.id}, ${i})" style="padding: 2px 6px; background: var(--chocolate-dark); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">削除</button>
+                            </div>
+                        `).join('')}
                     </div>
                     <button onclick="addBlinkKeyframe(${layer.id})" style="width: 100%; padding: 8px; background: linear-gradient(135deg, #87ceeb, #4682b4); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">👀 まばたき挿入</button>
                 </div>
@@ -665,19 +825,12 @@ function updatePropertiesPanel() {
                 </div>
             </div>
             
-            ${typeof generateBlinkExpressionUI === 'function' ? generateBlinkExpressionUI(layer) : ''}
-            
             ${generatePuppetFollowUI(layer)}
             
             ${generateParentUI(layer)}
             
             ${generateColorClippingUI(layer)}
         `;
-        
-        // 表情プレビューの初期化
-        if (typeof initExpressionPreview === 'function') {
-            initExpressionPreview(layer);
-        }
         
         // 色抜きクリッピングの参照レイヤーセレクトを更新
         if (typeof updateColorClippingReferenceSelect === 'function') {
@@ -867,6 +1020,14 @@ function updatePropertiesPanel() {
         if (!layer.bounceParams.swayVerticalDirection) {
             layer.bounceParams.swayVerticalDirection = 'both';
         }
+        // loopパラメータの初期化チェック（既存レイヤー対応）
+        if (layer.bounceParams.loop === undefined) {
+            layer.bounceParams.loop = false;
+        }
+        // loopPeriodパラメータの初期化チェック（既存レイヤー対応）
+        if (!layer.bounceParams.loopPeriod) {
+            layer.bounceParams.loopPeriod = 1.0;
+        }
         
         const bp = layer.bounceParams;
         
@@ -880,21 +1041,14 @@ function updatePropertiesPanel() {
             ${generateBlendModeUI(layer)}
             
             <div class="property-group">
-                <h4>🎈 揺れモーション制御</h4>
+                <h4>🎈 弾みレイヤー制御</h4>
                 
                 <div style="background: rgba(255, 215, 0, 0.15); padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 3px solid var(--accent-gold);">
                     <div style="font-size: 11px; color: var(--biscuit-light);">
                         ⭐ <strong>ヘッダーのアンカー設定が変形の軸になります！</strong><br>
-                        🎯 アンカーポイントに向かって画像が伸縮します
+                        🎯 アンカーポイントに向かって画像が伸縮します<br>
+                        💡 横揺れは「風揺れ」エフェクトで実現できます
                     </div>
-                </div>
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">アニメーションタイプ</label>
-                    <select id="bounce-type-select" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;" onchange="updateBounceType(this.value)">
-                        <option value="bounce" ${bp.type === 'bounce' ? 'selected' : ''}>弾み（Y軸伸縮）</option>
-                        <option value="sway" ${bp.type === 'sway' ? 'selected' : ''}>揺れ（横揺れのみ）</option>
-                    </select>
                 </div>
                 
                 <div style="margin-bottom: 12px;">
@@ -902,12 +1056,12 @@ function updatePropertiesPanel() {
                         メッシュ分割数: <span id="bounceDivisionsValue">${bp.divisions || 20}</span>
                     </label>
                     <input type="range" class="property-slider" id="bounce-divisions" value="${bp.divisions || 20}" 
-                        min="1" max="50" step="1"
+                        min="1" max="80" step="1"
                         oninput="document.getElementById('bounceDivisionsValue').textContent = this.value; updateBounceParam('divisions', parseInt(this.value))">
                     <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 大きな画像は数値を上げるとなめらかに</small>
                 </div>
                 
-                <div id="bounce-amplitude-control" style="margin-bottom: 12px; display: ${bp.type === 'bounce' ? 'block' : 'none'};">
+                <div id="bounce-amplitude-control" style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">
                         伸縮の大きさ: <span id="bounceAmplitudeValue">${bp.amplitude}</span>px
                     </label>
@@ -916,41 +1070,21 @@ function updatePropertiesPanel() {
                         oninput="document.getElementById('bounceAmplitudeValue').textContent = this.value + 'px'; updateBounceParam('amplitude', parseInt(this.value))">
                 </div>
                 
-                <div id="bounce-direction-control" style="margin-bottom: 12px; display: ${bp.type === 'bounce' ? 'block' : 'none'};">
+                <div id="bounce-direction-control" style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">弾み方向</label>
                     <select id="bounce-bounce-direction" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;" onchange="updateBounceParam('bounceDirection', this.value)">
-                        <option value="down" ${(bp.bounceDirection === 'down' || !bp.bounceDirection) ? 'selected' : ''}>アンカーより上が伸縮 ↓</option>
-                        <option value="up" ${bp.bounceDirection === 'up' ? 'selected' : ''}>アンカーより下が伸縮 ↑</option>
+                        <optgroup label="上下方向">
+                            <option value="vertical" ${bp.bounceDirection === 'vertical' ? 'selected' : ''}>↕ 上下両方が弾む</option>
+                            <option value="up" ${bp.bounceDirection === 'up' ? 'selected' : ''}>↑ 上だけ弾む</option>
+                            <option value="down" ${(bp.bounceDirection === 'down' || !bp.bounceDirection) ? 'selected' : ''}>↓ 下だけ弾む</option>
+                        </optgroup>
+                        <optgroup label="左右方向">
+                            <option value="horizontal" ${bp.bounceDirection === 'horizontal' ? 'selected' : ''}>↔ 左右両方が弾む</option>
+                            <option value="left" ${bp.bounceDirection === 'left' ? 'selected' : ''}>← 左だけ弾む</option>
+                            <option value="right" ${bp.bounceDirection === 'right' ? 'selected' : ''}>→ 右だけ弾む</option>
+                        </optgroup>
                     </select>
-                    <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 胸は上に、髪は下に向かって設定すると自然</small>
-                </div>
-                
-                <div id="sway-amplitude-control" style="margin-bottom: 12px; display: ${bp.type === 'sway' ? 'block' : 'none'};">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        左右揺れの大きさ: <span id="bounceSwayAmplitudeValue">${bp.swayAmplitude}</span>px
-                    </label>
-                    <input type="range" class="property-slider" id="bounce-sway-amplitude" value="${bp.swayAmplitude}" 
-                        min="0" max="300" step="1"
-                        oninput="document.getElementById('bounceSwayAmplitudeValue').textContent = this.value + 'px'; updateBounceParam('swayAmplitude', parseInt(this.value))">
-                </div>
-                
-                <div id="sway-direction-control" style="margin-bottom: 12px; display: ${bp.type === 'sway' ? 'block' : 'none'};">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">揺れ方向</label>
-                    <select id="bounce-sway-direction" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;" onchange="updateBounceParam('swayDirection', this.value)">
-                        <option value="left" ${bp.swayDirection === 'left' ? 'selected' : ''}>左から右へ ←</option>
-                        <option value="right" ${(bp.swayDirection === 'right' || !bp.swayDirection) ? 'selected' : ''}>右から左へ →</option>
-                    </select>
-                    <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 胸や髪の毛など左右非対称な揺れに便利</small>
-                </div>
-                
-                <div id="sway-vertical-direction-control" style="margin-bottom: 12px; display: ${bp.type === 'sway' ? 'block' : 'none'};">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">揺れる部分</label>
-                    <select id="bounce-sway-vertical-direction" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;" onchange="updateBounceParam('swayVerticalDirection', this.value)">
-                        <option value="both" ${(bp.swayVerticalDirection === 'both' || !bp.swayVerticalDirection) ? 'selected' : ''}>アンカーより上下両方</option>
-                        <option value="up" ${bp.swayVerticalDirection === 'up' ? 'selected' : ''}>アンカーより上のみ ↑</option>
-                        <option value="down" ${bp.swayVerticalDirection === 'down' ? 'selected' : ''}>アンカーより下のみ ↓</option>
-                    </select>
-                    <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 髪は上、胸は下など部分的に揺らせます</small>
+                    <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 ボールなら上下両方、髪なら下だけなど</small>
                 </div>
                 
                 <div style="margin-bottom: 12px;">
@@ -971,36 +1105,38 @@ function updatePropertiesPanel() {
                         oninput="document.getElementById('bounceDampingValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateBounceParam('dampingTime', parseFloat(this.value))">
                 </div>
                 
-                <div style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <!-- ループモード設定 -->
+                <div style="margin-bottom: 12px; padding: 12px; background: ${bp.loop ? 'rgba(0, 255, 128, 0.15)' : 'rgba(255, 165, 0, 0.1)'}; border-radius: 8px; border: 1px solid ${bp.loop ? 'rgba(0, 255, 128, 0.5)' : 'var(--border-color)'};">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: bold;">
+                        <input type="checkbox" id="bounce-loop-checkbox" ${bp.loop ? 'checked' : ''} 
+                            onchange="updateBounceLoop(this.checked)"
+                            style="width: 18px; height: 18px; cursor: pointer;">
+                        <span>🔄 ループ再生（減衰なし）</span>
+                    </label>
+                    <div id="loop-period-control" style="margin-top: 10px; display: ${bp.loop ? 'block' : 'none'};">
+                        <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                            ループ周期: <span id="bounceLoopPeriodValue">${(bp.loopPeriod || 1.0).toFixed(2)}</span>秒
+                        </label>
+                        <input type="range" class="property-slider" id="bounce-loop-period" value="${bp.loopPeriod || 1.0}" 
+                            min="0.1" max="5.0" step="0.1"
+                            oninput="document.getElementById('bounceLoopPeriodValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateBounceParam('loopPeriod', parseFloat(this.value))">
+                        <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 1往復にかかる時間（小さいほど速く揺れる）</small>
+                    </div>
+                    <div style="font-size: 10px; color: ${bp.loop ? '#00ff80' : 'var(--biscuit-light)'}; margin-top: 8px;">
+                        ${bp.loop ? '✅ キーフレーム不要で常に揺れ続けます' : '💡 チェックすると減衰なしで永続ループ'}
+                    </div>
+                </div>
+                
+                <div id="keyframe-section" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: ${bp.loop ? 'none' : 'block'};">
                     <h5 style="margin: 8px 0;">キーフレーム（アニメーション開始点）</h5>
                     <button onclick="addBounceKeyframeFromCurrent()" style="width: 100%; padding: 8px; background: linear-gradient(135deg, #ffa500, #ff8c00); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🎬 現在位置に挿入</button>
                     <div id="bounce-keyframe-list" style="margin-top: 8px; max-height: 200px; overflow-y: auto;"></div>
                 </div>
                 
-                <!-- 揺れタイプのみ：ピンコントロール -->
-                <div id="sway-pin-control" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: ${bp.type === 'sway' ? 'block' : 'none'};">
-                    <h5 style="font-weight: bold; margin-bottom: 8px;">📍 揺れ制御ピン（複数配置可能）</h5>
-                    <button id="addBouncePinBtn" onclick="toggleBouncePinMode()" style="width: 100%; padding: 12px; background: ${bouncePinMode ? 'linear-gradient(135deg, var(--accent-gold), var(--biscuit-medium))' : 'var(--accent-orange)'}; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; box-shadow: ${bouncePinMode ? '0 0 10px rgba(255, 215, 0, 0.5)' : 'none'}; transition: all 0.3s;">
-                        ${bouncePinMode ? '✅ ピン挿入モード有効' : '➕ ピン挿入モードをON'}
-                    </button>
-                    
-                    <div id="bounce-pin-mode-controls" style="margin-top: 12px;">
-                        <div style="margin-bottom: 12px;">
-                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                                影響範囲: <span id="bouncePinRangeValue">20</span>%
-                            </label>
-                            <input type="range" class="property-slider" id="bounce-pin-range" value="20" min="1" max="50" step="1" oninput="updateBouncePinRange(parseInt(this.value))">
-                            <small style="font-size: 10px; color: var(--biscuit-light);">ピンから何%の範囲を固定するか</small>
-                        </div>
-                        
-                        <div id="bounce-pin-list" style="max-height: 200px; overflow-y: auto;"></div>
-                    </div>
-                </div>
-                
                 <div style="background: rgba(255, 165, 0, 0.2); padding: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
-                    💡 <strong>弾み</strong> = Y軸伸縮のみ<br>
-                    🌊 <strong>揺れ</strong> = 横揺れのみ（減衰あり）<br>
-                    📍 <strong>ピン</strong> = 揺れを固定・抑制する箇所を配置<br>
+                    💡 <strong>弾み</strong> = Y軸伸縮でぷるぷる揺れる<br>
+                    🔄 <strong>ループ</strong> = 減衰なしで永続的に弾み続ける<br>
+                    💨 <strong>横揺れ</strong>は「風揺れ」エフェクトを使ってください<br>
                     ⚓ <strong>ヘッダーのアンカー設定が変形の軸です！</strong>
                 </div>
             </div>
@@ -1191,13 +1327,48 @@ function generateWindSwayUI(layer) {
                     </select>
                 </div>
                 
+                <!-- ループモード設定 -->
+                <div style="margin-bottom: 16px; padding: 12px; background: rgba(210, 180, 140, 0.15); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
+                        <input type="checkbox" id="prop-wind-loop" ${ws.loop !== false ? 'checked' : ''}>
+                        <span>🔄 ループ再生（常に揺れ続ける）</span>
+                    </label>
+                    <div id="wind-damping-controls" style="display: ${ws.loop === false ? 'block' : 'none'}; margin-top: 8px;">
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                                揺れ回数: <span id="windFrequencyValue">${ws.frequency || 3}</span>
+                            </label>
+                            <input type="range" class="property-slider" id="prop-wind-frequency" value="${ws.frequency || 3}" 
+                                min="1" max="10" step="1">
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                                減衰時間: <span id="windDampingTimeValue">${(ws.dampingTime || 1.0).toFixed(1)}</span>秒
+                            </label>
+                            <input type="range" class="property-slider" id="prop-wind-dampingtime" value="${(ws.dampingTime || 1.0) * 10}" 
+                                min="1" max="50" step="1">
+                        </div>
+                        <div style="margin-top: 8px;">
+                            <button id="insertWindSwayKeyframeBtn" onclick="insertWindSwayKeyframe()" style="width: 100%; padding: 10px; background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange)); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                                ⏱️ 現在のフレームで風揺れ発動
+                            </button>
+                        </div>
+                        <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">
+                            💡 ループOFFの場合、キーフレームで発動タイミングを指定
+                        </small>
+                    </div>
+                    <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">
+                        ${ws.loop !== false ? '✅ 常に揺れ続けます' : '⏱️ キーフレームで発動タイミングを指定'}
+                    </small>
+                </div>
+                
                 <!-- 分割数 -->
                 <div style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">
                         分割数: <span id="windDivisionsValue">${ws.divisions}</span>
                     </label>
                     <input type="range" class="property-slider" id="prop-wind-divisions" value="${ws.divisions}" 
-                        min="1" max="50" step="1">
+                        min="1" max="80" step="1">
                 </div>
                 
                 <!-- 揺れ角度 -->
@@ -1427,6 +1598,36 @@ function setupWindSwayEventListeners() {
         });
     }
     
+    // ループチェックボックス
+    const loopCheck = document.getElementById('prop-wind-loop');
+    if (loopCheck) {
+        loopCheck.addEventListener('change', (e) => {
+            layer.windSwayParams.loop = e.target.checked;
+            const dampingControls = document.getElementById('wind-damping-controls');
+            if (dampingControls) {
+                dampingControls.style.display = e.target.checked ? 'none' : 'block';
+            }
+            render();
+        });
+    }
+    
+    // 減衰モード用パラメータ
+    setupWindSwaySlider('frequency', 'windFrequencyValue', (value) => {
+        layer.windSwayParams.frequency = parseInt(value);
+        render();
+    });
+    
+    const dampingTimeSlider = document.getElementById('prop-wind-dampingtime');
+    const dampingTimeValue = document.getElementById('windDampingTimeValue');
+    if (dampingTimeSlider && dampingTimeValue) {
+        dampingTimeSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value) / 10;
+            dampingTimeValue.textContent = value.toFixed(1) + '秒';
+            layer.windSwayParams.dampingTime = value;
+            render();
+        });
+    }
+    
     setupPinModeListeners();
 }
 
@@ -1575,6 +1776,8 @@ function startAnchorPointPick() {
     anchorPointPickMode = true;
     canvas.style.cursor = 'crosshair';
     
+    console.log('[AnchorPick] モード開始');
+    
     // 既存のイベントリスナーを削除
     if (anchorPointClickHandler) {
         canvas.removeEventListener('click', anchorPointClickHandler);
@@ -1582,12 +1785,22 @@ function startAnchorPointPick() {
     
     // 新しいイベントリスナーを設定
     anchorPointClickHandler = (e) => {
+        console.log('[AnchorPick] クリック検出');
+        
         const layer = layers.find(l => l.id === selectedLayerIds[0]);
-        if (!layer) return;
+        if (!layer) {
+            console.log('[AnchorPick] エラー: レイヤーが見つかりません');
+            return;
+        }
+        
+        console.log('[AnchorPick] 対象レイヤー:', layer.name, 'タイプ:', layer.type);
+        console.log('[AnchorPick] レイヤーサイズ: width=', layer.width, 'height=', layer.height);
         
         const rect = canvas.getBoundingClientRect();
         const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
         const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+        
+        console.log('[AnchorPick] マウス座標: mouseX=', mouseX, 'mouseY=', mouseY);
         
         // 親の変形を考慮したワールド座標を計算
         let worldX = layer.x;
@@ -1601,8 +1814,8 @@ function startAnchorPointPick() {
             const parent = layers.find(l => l.id === currentLayer.parentLayerId);
             if (!parent) break;
             
-            // フォルダの場合（widthとheightがないので簡略化）
-            if (parent.type === 'folder') {
+            // フォルダまたはジャンプフォルダーの場合（widthとheightがないので簡略化）
+            if (parent.type === 'folder' || parent.type === 'jumpFolder') {
                 // 親のスケールを適用
                 let relX = worldX * parent.scale;
                 let relY = worldY * parent.scale;
@@ -1697,9 +1910,14 @@ function startAnchorPointPick() {
         const newAnchorX = Math.max(0, Math.min(1, (localX + layerWidth / 2) / layerWidth));
         const newAnchorY = Math.max(0, Math.min(1, (localY + layerHeight / 2) / layerHeight));
         
+        console.log('[AnchorPick] 計算結果: localX=', localX, 'localY=', localY);
+        console.log('[AnchorPick] 新アンカー: anchorX=', newAnchorX, 'anchorY=', newAnchorY);
+        
         // アンカーポイントを更新
         layer.anchorX = newAnchorX;
         layer.anchorY = newAnchorY;
+        
+        console.log('[AnchorPick] アンカー設定完了');
         
         // モードを解除
         anchorPointPickMode = false;
@@ -1761,6 +1979,15 @@ function setAnchorPointLive(axis, value) {
         layer.anchorY = value;
     }
     
+    render();
+}
+
+// ===== アンカー回転設定 =====
+function setAnchorRotation(value) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer) return;
+    
+    layer.anchorRotation = value;
     render();
 }
 
@@ -1957,6 +2184,36 @@ function updateBounceParam(param, value) {
     
     layer.bounceParams[param] = value;
     render();
+}
+
+// ===== ループモード切り替え =====
+function updateBounceLoop(enabled) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'bounce') return;
+    
+    layer.bounceParams.loop = enabled;
+    
+    // ループ周期の初期値を設定
+    if (enabled && !layer.bounceParams.loopPeriod) {
+        layer.bounceParams.loopPeriod = 1.0;
+    }
+    
+    // UI表示の切り替え
+    const loopPeriodControl = document.getElementById('loop-period-control');
+    if (loopPeriodControl) {
+        loopPeriodControl.style.display = enabled ? 'block' : 'none';
+    }
+    
+    const keyframeSection = document.getElementById('keyframe-section');
+    if (keyframeSection) {
+        keyframeSection.style.display = enabled ? 'none' : 'block';
+    }
+    
+    // プロパティパネルを更新（スタイル変更のため）
+    updatePropertiesPanel();
+    render();
+    
+    console.log(`[Bounce Loop] ループモード ${enabled ? '有効' : '無効'}`);
 }
 
 // ===== 揺れモーション軸設定モード =====
@@ -2432,7 +2689,7 @@ function isDescendantOf(layerId, potentialAncestorId) {
 // フォルダの親レイヤーを更新（位置補正付き）
 function updateFolderParent(value) {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || layer.type !== 'folder') return;
+    if (!layer || (layer.type !== 'folder' && layer.type !== 'jumpFolder')) return;
     
     const newParentId = value ? parseInt(value) : null;
     const oldParentId = layer.parentLayerId;
@@ -2472,4 +2729,232 @@ function updateFolderParent(value) {
     updateLayerList();
     updatePropertiesPanel();
     render();
+}
+
+// フォルダのアンカー基準レイヤーを更新
+function updateFolderAnchorReference(value) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || (layer.type !== 'folder' && layer.type !== 'jumpFolder')) return;
+    
+    const newRefId = value ? parseInt(value) : null;
+    
+    // 基準レイヤーを更新
+    layer.anchorReferenceLayerId = newRefId;
+    
+    if (newRefId) {
+        const refLayer = layers.find(l => l.id === newRefId);
+        if (refLayer) {
+            console.log(`📁 アンカー基準レイヤー設定: ${layer.name} → ${refLayer.name}`);
+        }
+    } else {
+        console.log(`📁 アンカー基準レイヤー解除: ${layer.name}`);
+    }
+    
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+}
+
+// ===== ジャンプフォルダー関連 =====
+
+// ジャンプパラメータ更新
+function updateJumpParam(param, value) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'jumpFolder') return;
+    
+    layer.jumpParams[param] = value;
+    render();
+}
+
+// ジャンプループモード切り替え
+function updateJumpLoop(enabled) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'jumpFolder') return;
+    
+    layer.jumpParams.loop = enabled;
+    
+    // ループ周期の初期値を設定
+    if (enabled && !layer.jumpParams.loopPeriod) {
+        layer.jumpParams.loopPeriod = 1.0;
+    }
+    
+    // UI表示の切り替え
+    const loopPeriodControl = document.getElementById('jump-loop-period-control');
+    if (loopPeriodControl) {
+        loopPeriodControl.style.display = enabled ? 'block' : 'none';
+    }
+    
+    const keyframeSection = document.getElementById('jump-keyframe-section');
+    if (keyframeSection) {
+        keyframeSection.style.display = enabled ? 'none' : 'block';
+    }
+    
+    updatePropertiesPanel();
+    render();
+    
+    console.log(`[Jump Loop] ループモード ${enabled ? '有効' : '無効'}`);
+}
+
+// ジャンプキーフレーム追加
+function addJumpKeyframe() {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'jumpFolder') return;
+    
+    if (!layer.jumpParams.keyframes) {
+        layer.jumpParams.keyframes = [];
+    }
+    
+    // 現在のフレームを計算
+    const currentFrameNum = Math.floor(currentTime * (typeof projectFPS !== 'undefined' ? projectFPS : 24));
+    
+    // 現在のフレームに既にキーフレームがあるか確認
+    const existingIndex = layer.jumpParams.keyframes.findIndex(kf => kf.frame === currentFrameNum);
+    if (existingIndex !== -1) {
+        alert('このフレームには既にキーフレームがあります');
+        return;
+    }
+    
+    // 新しいキーフレームを追加
+    layer.jumpParams.keyframes.push({
+        frame: currentFrameNum
+    });
+    
+    // フレーム順にソート
+    layer.jumpParams.keyframes.sort((a, b) => a.frame - b.frame);
+    
+    updateJumpKeyframeList();
+    render();
+    
+    console.log(`🦘 ジャンプキーフレーム追加: フレーム ${currentFrameNum}`);
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+}
+
+// ジャンプキーフレーム削除
+function removeJumpKeyframe(frame) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'jumpFolder') return;
+    
+    layer.jumpParams.keyframes = layer.jumpParams.keyframes.filter(kf => kf.frame !== frame);
+    
+    updateJumpKeyframeList();
+    render();
+    
+    console.log(`🦘 ジャンプキーフレーム削除: フレーム ${frame}`);
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+}
+
+// ジャンプキーフレームリスト更新
+function updateJumpKeyframeList() {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'jumpFolder') return;
+    
+    const listContainer = document.getElementById('jump-keyframe-list');
+    if (!listContainer) return;
+    
+    if (!layer.jumpParams.keyframes || layer.jumpParams.keyframes.length === 0) {
+        listContainer.innerHTML = '<div style="font-size: 11px; color: var(--biscuit); padding: 8px; text-align: center;">キーフレームなし</div>';
+        return;
+    }
+    
+    listContainer.innerHTML = layer.jumpParams.keyframes.map(kf => `
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--chocolate-medium); border-radius: 4px; margin-bottom: 4px;">
+            <span style="flex: 1; font-size: 11px; color: var(--biscuit-light);">🎬 フレーム ${kf.frame}</span>
+            <button onclick="goToFrame(${kf.frame})" style="padding: 4px 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 10px;">移動</button>
+            <button onclick="removeJumpKeyframe(${kf.frame})" style="padding: 4px 8px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 10px;">✕</button>
+        </div>
+    `).join('');
+}
+
+// フォルダ親更新（ジャンプフォルダー対応）
+function updateJumpFolderParent(value) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'jumpFolder') return;
+    
+    const newParentId = value ? parseInt(value) : null;
+    const oldParentId = layer.parentLayerId;
+    
+    if (newParentId === oldParentId) return;
+    
+    // 循環参照チェック
+    if (newParentId && isDescendantOf(newParentId, layer.id)) {
+        alert('循環参照になるため、この親子関係は設定できません');
+        return;
+    }
+    
+    // 位置補正
+    const oldTransform = getParentTransform(oldParentId);
+    const oldWorldX = layer.x + oldTransform.x;
+    const oldWorldY = layer.y + oldTransform.y;
+    
+    const newTransform = getParentTransform(newParentId);
+    
+    layer.x = oldWorldX - newTransform.x;
+    layer.y = oldWorldY - newTransform.y;
+    
+    layer.parentLayerId = newParentId;
+    
+    updateLayerList();
+    updatePropertiesPanel();
+    render();
+}
+
+// ===== 風揺れキーフレーム挿入 =====
+function insertWindSwayKeyframe() {
+    if (selectedLayerIds.length !== 1) {
+        alert('レイヤーを1つ選択してください');
+        return;
+    }
+    
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer) return;
+    
+    // キーフレーム配列を初期化
+    if (!layer.windSwayKeyframes) {
+        layer.windSwayKeyframes = [];
+    }
+    
+    const fps = typeof fpsRate !== 'undefined' ? fpsRate : 24;
+    const currentFrame = Math.floor(currentTime * fps);
+    
+    // 同じフレームに既にキーフレームがあるか確認
+    const existingIndex = layer.windSwayKeyframes.findIndex(k => k.frame === currentFrame);
+    
+    if (existingIndex >= 0) {
+        // 既存のキーフレームを更新
+        layer.windSwayKeyframes[existingIndex] = {
+            frame: currentFrame
+        };
+        console.log(`[WindSway Keyframe] フレーム ${currentFrame} のキーフレームを更新`);
+    } else {
+        // 新しいキーフレームを追加
+        layer.windSwayKeyframes.push({
+            frame: currentFrame
+        });
+        // フレーム順にソート
+        layer.windSwayKeyframes.sort((a, b) => a.frame - b.frame);
+        console.log(`[WindSway Keyframe] フレーム ${currentFrame} にキーフレームを挿入`);
+    }
+    
+    updateLayerList();
+    render();
+    
+    // フィードバック
+    const btn = document.getElementById('insertWindSwayKeyframeBtn');
+    if (btn) {
+        const originalText = btn.textContent;
+        btn.textContent = '✅ 挿入しました！';
+        btn.style.background = 'linear-gradient(135deg, #4CAF50, #45a049)';
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.background = 'linear-gradient(135deg, var(--accent-gold), var(--accent-orange))';
+        }, 1000);
+    }
 }

@@ -1,12 +1,15 @@
 /**
- * ⭐ Starlit Puppet Editor v1.8.7
- * 揺れモーションエフェクト - 変形曲線を滑らか化 + アンカー再設定対応
- * - 風揺れと同じsmoothstep補間を実装
- * - メッシュ分割数を増やして滑らかな変形に（20→30）
- * - ピンの影響範囲をsmootherstepで滑らかに
- * - アンカーからの減衰をsmoothstepで自然に
- * - アンカー設定モードとピンモードの競合を修正
- * - キーフレーム入力後もアンカーを再設定できるように修正
+ * ⭐ Puppet Bear v1.15.1
+ * 揺れモーションエフェクト - ループ機能追加
+ * - ループモード追加（減衰なしで永続ループ）
+ * - ループ周期パラメータ追加
+ * - キーフレーム不要で常に揺れ続けるオプション
+ * 
+ * v1.15.1 更新:
+ * - loop パラメータ追加（true/false）
+ * - loopPeriod パラメータ追加（ループの周期、秒）
+ * - ループモード時はキーフレーム不要で常時アニメーション
+ * - UIにループチェックボックスと周期スライダーを追加
  * 
  * v1.8.7 更新:
  * - smoothstep/smootherstep補間を実装
@@ -44,6 +47,8 @@ function getDefaultBounceParams() {
         bounceDirection: 'down', // 弾み方向 'down' = 下に伸縮, 'up' = 上に伸縮
         swayDirection: 'right', // 揺れ方向 'left' = 左から, 'right' = 右から
         swayVerticalDirection: 'both', // 揺れる部分 'both' = 上下両方, 'up' = 上のみ, 'down' = 下のみ
+        loop: false, // ループ再生（減衰なしで永続ループ）
+        loopPeriod: 1.0, // ループの周期（秒）
         pins: [], // ピン配列 { x: number, y: number, range: number }
         keyframes: [] // 揺れアニメーションのキーフレーム { frame: number }
     };
@@ -115,89 +120,181 @@ function bounceSmootherstep(edge0, edge1, x) {
 }
 
 // ===== 揺れモーションメッシュ生成（風揺れベース） =====
-function createBounceMeshWithBounds(bounceParams, width, height, localTime, animationStartTime, anchorX, anchorY) {
-    // 垂直分割数をパラメータから取得（1-50の範囲でクランプ）
+function createBounceMeshWithBounds(bounceParams, width, height, localTime, animationStartTime, anchorX, anchorY, anchorRotation = 0) {
+    // 垂直分割数をパラメータから取得（1-80の範囲でクランプ）
     let N = Math.floor(bounceParams.divisions || 20);
     if (N < 1) N = 1;
-    if (N > 50) N = 50;
-    const M = 10; // 水平分割数
+    if (N > 80) N = 80;
     
-    const elapsedTime = localTime - animationStartTime;
+    // 弾み方向を取得
+    const bounceDir = bounceParams.bounceDirection || 'down';
+    const isHorizontalBounce = ['left', 'right', 'horizontal'].includes(bounceDir);
     
-    // アニメーション開始前（elapsedTime < 0）の場合は停止
-    let isAnimating = elapsedTime >= 0;
+    // アンカー回転がある場合、または左右方向の弾みの場合は水平方向の分割も増やす
+    let M = (anchorRotation !== 0 || isHorizontalBounce) ? Math.max(20, N) : 10;
     
-    // 減衰係数（指数関数的減衰、時間無制限で継続）
-    const damping = isAnimating ? Math.exp(-5 * (elapsedTime / bounceParams.dampingTime)) : 0;
+    // アンカー回転をラジアンに変換
+    const anchorRotRad = anchorRotation * Math.PI / 180;
+    const cosRot = Math.cos(anchorRotRad);
+    const sinRot = Math.sin(anchorRotRad);
+    
+    // ループモードかどうか
+    const isLoopMode = bounceParams.loop === true;
+    
+    let elapsedTime;
+    let isAnimating;
+    let damping;
+    
+    if (isLoopMode) {
+        // ループモード: 常にアニメーション中、減衰なし
+        elapsedTime = localTime;
+        isAnimating = true;
+        damping = 1.0; // 減衰なし
+    } else {
+        // 通常モード: キーフレームからの経過時間で減衰
+        elapsedTime = localTime - animationStartTime;
+        isAnimating = elapsedTime >= 0;
+        damping = isAnimating ? Math.exp(-5 * (elapsedTime / bounceParams.dampingTime)) : 0;
+    }
     
     // アンカーポイントを軸として使用
     let pinPosition = anchorY; // アンカーY座標を使用
     let pinX = (anchorX - 0.5) * width; // アンカーX座標を使用（中心基準）
     
-    // 弾みタイプ（Y軸伸縮のみ）
+    // 弾みタイプ
     if (bounceParams.type === 'bounce') {
         const worldPositions = [], texCoords = [];
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         
-        // 周期
-        const omega = 2 * Math.PI * bounceParams.frequency / bounceParams.dampingTime;
-        const wave = isAnimating ? Math.sin(omega * elapsedTime) * damping : 0;
+        // 周期の計算（ループモードと通常モードで異なる）
+        let omega;
+        let wave;
+        
+        if (isLoopMode) {
+            // ループモード: loopPeriodを使用した連続波形
+            const period = bounceParams.loopPeriod || 1.0;
+            omega = 2 * Math.PI / period;
+            wave = Math.sin(omega * elapsedTime);
+        } else {
+            // 通常モード: 減衰付き波形
+            omega = 2 * Math.PI * bounceParams.frequency / bounceParams.dampingTime;
+            wave = isAnimating ? Math.sin(omega * elapsedTime) * damping : 0;
+        }
         // wave > 0：圧縮（縮む）、wave < 0：伸長（伸びる）
         // マイナスをかけることで、デフォルト → 圧縮 → 伸びる の動きになる
         const scaleEffect = -(bounceParams.amplitude / 100) * wave;
         
-        // ピン位置のY座標（中心を0とした座標系、-height/2 から height/2 の範囲）
-        const pinYRatio = pinPosition;  // 0-1の範囲
-        const pinY = (pinYRatio - 0.5) * height;  // 中心を0とした座標
+        // 弾み方向を取得
+        const bounceDir = bounceParams.bounceDirection || 'down';
         
-        // 弾み方向（'up' = 上に向かって（ピンより下が伸縮）, 'down' = 下に向かって（ピンより上が伸縮））
-        // デフォルトは 'down'（ピンより上が伸縮）
-        const stretchUp = bounceParams.bounceDirection === 'up';
+        // 方向フラグを設定
+        const isVertical = ['up', 'down', 'vertical'].includes(bounceDir);
+        const isHorizontal = ['left', 'right', 'horizontal'].includes(bounceDir);
+        
+        // アンカーポイントの位置（0-1の範囲）
+        const anchorPosX = anchorX;
+        const anchorPosY = anchorY;
         
         for (let i = 0; i <= N; i++) {
-            const yRatio = i / N;
-            
-            let y;
-            if (yRatio <= pinPosition) {
-                // ピンより上の部分
-                const distanceFromPin = pinPosition - yRatio;
-                if (stretchUp) {
-                    // 上に向かってモード：上は固定
-                    y = (yRatio - 0.5) * height;
-                } else {
-                    // 下に向かってモード：上が伸縮（下へ圧縮 → 上へ伸びる）
-                    const linearPos = distanceFromPin / pinPosition;
-                    // smoothstepを適用してより自然な減衰に
-                    const relativePos = bounceSmoothstep(0, 1, linearPos);
-                    const scaledDistance = distanceFromPin * (1 + scaleEffect * relativePos);
-                    y = pinY - scaledDistance * height;
-                }
-            } else {
-                // ピンより下の部分
-                const distanceFromPin = yRatio - pinPosition;
-                if (stretchUp) {
-                    // 上に向かってモード：下が伸縮（上へ圧縮 → 下へ伸びる）
-                    const linearPos = distanceFromPin / (1 - pinPosition);
-                    // smoothstepを適用してより自然な減衰に
-                    const relativePos = bounceSmoothstep(0, 1, linearPos);
-                    const scaledDistance = distanceFromPin * (1 + scaleEffect * relativePos);
-                    y = pinY + scaledDistance * height;
-                } else {
-                    // 下に向かってモード：下は固定
-                    y = (yRatio - 0.5) * height;
-                }
-            }
-            
             for (let j = 0; j <= M; j++) {
-                const xRatio = j / M;
-                const x = (xRatio - 0.5) * width;
+                const xRatio = j / M;  // 0-1
+                const yRatio = i / N;  // 0-1
                 
-                minX = Math.min(minX, x);
-                maxX = Math.max(maxX, x);
-                minY = Math.min(minY, y);
-                maxY = Math.max(maxY, y);
-                worldPositions.push(x, y);
+                // テクスチャ座標（そのまま）
                 texCoords.push(xRatio, yRatio);
+                
+                // ピクセル座標（画像中心基準）
+                const pixelX = (xRatio - 0.5) * width;
+                const pixelY = (yRatio - 0.5) * height;
+                
+                // アンカーポイントからの相対位置（ピクセル）
+                const anchorPixelX = (anchorPosX - 0.5) * width;
+                const anchorPixelY = (anchorPosY - 0.5) * height;
+                const relX = pixelX - anchorPixelX;
+                const relY = pixelY - anchorPixelY;
+                
+                // アンカー回転の逆回転を適用して、揺れ計算用のローカル座標に変換
+                const localX = relX * cosRot + relY * sinRot;
+                const localY = -relX * sinRot + relY * cosRot;
+                
+                // ローカル座標系での位置（0-1に正規化）
+                const normalizedLocalX = (localX / width) + 0.5;
+                const normalizedLocalY = (localY / height) + 0.5;
+                
+                // ローカル座標系でのアンカー位置は常に0.5（中心）
+                const localAnchor = 0.5;
+                
+                // オフセット計算
+                let offsetLocalX = 0;
+                let offsetLocalY = 0;
+                
+                if (isVertical) {
+                    // 上下方向の弾み
+                    if (normalizedLocalY <= localAnchor) {
+                        // アンカーより上
+                        const distanceFromAnchor = localAnchor - normalizedLocalY;
+                        const linearPos = localAnchor > 0 ? distanceFromAnchor / localAnchor : 0;
+                        const relativePos = bounceSmoothstep(0, 1, linearPos);
+                        
+                        if (bounceDir === 'up' || bounceDir === 'vertical') {
+                            // 上が弾む
+                            offsetLocalY = -distanceFromAnchor * scaleEffect * relativePos * height;
+                        }
+                        // 'down'の場合は上は固定（offsetLocalY = 0）
+                    } else {
+                        // アンカーより下
+                        const distanceFromAnchor = normalizedLocalY - localAnchor;
+                        const linearPos = (1 - localAnchor) > 0 ? distanceFromAnchor / (1 - localAnchor) : 0;
+                        const relativePos = bounceSmoothstep(0, 1, linearPos);
+                        
+                        if (bounceDir === 'down' || bounceDir === 'vertical') {
+                            // 下が弾む
+                            offsetLocalY = distanceFromAnchor * scaleEffect * relativePos * height;
+                        }
+                        // 'up'の場合は下は固定（offsetLocalY = 0）
+                    }
+                }
+                
+                if (isHorizontal) {
+                    // 左右方向の弾み
+                    if (normalizedLocalX <= localAnchor) {
+                        // アンカーより左
+                        const distanceFromAnchor = localAnchor - normalizedLocalX;
+                        const linearPos = localAnchor > 0 ? distanceFromAnchor / localAnchor : 0;
+                        const relativePos = bounceSmoothstep(0, 1, linearPos);
+                        
+                        if (bounceDir === 'left' || bounceDir === 'horizontal') {
+                            // 左が弾む
+                            offsetLocalX = -distanceFromAnchor * scaleEffect * relativePos * width;
+                        }
+                        // 'right'の場合は左は固定（offsetLocalX = 0）
+                    } else {
+                        // アンカーより右
+                        const distanceFromAnchor = normalizedLocalX - localAnchor;
+                        const linearPos = (1 - localAnchor) > 0 ? distanceFromAnchor / (1 - localAnchor) : 0;
+                        const relativePos = bounceSmoothstep(0, 1, linearPos);
+                        
+                        if (bounceDir === 'right' || bounceDir === 'horizontal') {
+                            // 右が弾む
+                            offsetLocalX = distanceFromAnchor * scaleEffect * relativePos * width;
+                        }
+                        // 'left'の場合は右は固定（offsetLocalX = 0）
+                    }
+                }
+                
+                // オフセットをワールド座標系に戻す（アンカー回転を適用）
+                const offsetWorldX = offsetLocalX * cosRot - offsetLocalY * sinRot;
+                const offsetWorldY = offsetLocalX * sinRot + offsetLocalY * cosRot;
+                
+                // 最終位置
+                const finalX = pixelX + offsetWorldX;
+                const finalY = pixelY + offsetWorldY;
+                
+                minX = Math.min(minX, finalX);
+                maxX = Math.max(maxX, finalX);
+                minY = Math.min(minY, finalY);
+                maxY = Math.max(maxY, finalY);
+                worldPositions.push(finalX, finalY);
             }
         }
         
@@ -229,9 +326,23 @@ function createBounceMeshWithBounds(bounceParams, width, height, localTime, anim
     // 揺れタイプ（左右揺れ、中心からスタート）
     const L = height; // 画像の高さ
     
-    // 揺れパラメータ
-    const omega = 2 * Math.PI * bounceParams.frequency / bounceParams.dampingTime;
-    const t = elapsedTime;
+    // 揺れパラメータ（ループモードと通常モードで異なる）
+    let omega;
+    let t;
+    let swayDamping;
+    
+    if (isLoopMode) {
+        // ループモード: loopPeriodを使用した連続波形
+        const period = bounceParams.loopPeriod || 1.0;
+        omega = 2 * Math.PI / period;
+        t = elapsedTime;
+        swayDamping = 1.0; // 減衰なし
+    } else {
+        // 通常モード: 減衰付き波形
+        omega = 2 * Math.PI * bounceParams.frequency / bounceParams.dampingTime;
+        t = elapsedTime;
+        swayDamping = damping;
+    }
     
     // 揺れ方向（左右）の係数
     // right: 正の方向（右に揺れる）, left: 負の方向（左に揺れる）
@@ -242,79 +353,94 @@ function createBounceMeshWithBounds(bounceParams, width, height, localTime, anim
     
     // 左右揺れの波形（t=0で0、指定方向に揺れて中心に戻る）
     // sin(ωt)を使用：t=0で0（中心）、t増加で±1、減衰しながら中心に戻る
-    const swayWave = isAnimating ? Math.sin(omega * t) * damping * directionSign : 0;
+    // ループモードでは減衰なし（swayDamping = 1.0）
+    const swayWave = isAnimating ? Math.sin(omega * t) * swayDamping * directionSign : 0;
     
-    // 中心線の位置を計算
-    const centerX = new Array(N + 1);
-    const centerY = new Array(N + 1);
-    
-    // 各頂点の座標を計算
-    for (let i = 0; i <= N; i++) {
-        const yRatio = i / N; // 0-1の範囲
-        
-        // Y座標は常に等間隔（伸縮なし、上下にブレない）
-        centerY[i] = (yRatio - 0.5) * height;
-        
-        // ピンの影響を計算（風揺れと同じロジック）
-        let pinMultiplier = 1.0;
-        if (bounceParams.pins && bounceParams.pins.length > 0) {
-            let minMultiplier = 1.0;
-            for (const pin of bounceParams.pins) {
-                const pinPos = pin.position / 100; // 0-1に変換
-                const distance = Math.abs(yRatio - pinPos);
-                const range = pin.range / 100; // 0-1に変換
-                if (distance < range) {
-                    const normalizedDist = distance / range;
-                    // smootherstepを使用してより滑らかな減衰を実現
-                    const multiplier = bounceSmootherstep(0, 1, normalizedDist);
-                    minMultiplier = Math.min(minMultiplier, multiplier);
-                }
-            }
-            pinMultiplier = minMultiplier;
-        }
-        
-        // アンカー位置からの距離を計算（0-1の範囲に正規化）
-        let distanceFromAnchor;
-        let shouldSway = false;
-        
-        if (yRatio <= pinPosition) {
-            // アンカーより上
-            const linearDist = pinPosition > 0 ? (pinPosition - yRatio) / pinPosition : 0;
-            // smoothstepを適用してより自然な増加に
-            distanceFromAnchor = bounceSmoothstep(0, 1, linearDist);
-            // 揺れる部分の判定（上のみ、または両方）
-            shouldSway = (swayVerticalDirection === 'up' || swayVerticalDirection === 'both');
-        } else {
-            // アンカーより下
-            const linearDist = (1 - pinPosition) > 0 ? (yRatio - pinPosition) / (1 - pinPosition) : 0;
-            // smoothstepを適用してより自然な増加に
-            distanceFromAnchor = bounceSmoothstep(0, 1, linearDist);
-            // 揺れる部分の判定（下のみ、または両方）
-            shouldSway = (swayVerticalDirection === 'down' || swayVerticalDirection === 'both');
-        }
-        
-        // 左右揺れ（アンカーから遠いほど大きく揺れる、ピンの影響を受ける）
-        // 選択された部分のみ揺れる
-        const swayX = shouldSway ? bounceParams.swayAmplitude * swayWave * Math.pow(distanceFromAnchor, 1.2) * pinMultiplier : 0;
-        centerX[i] = swayX;
-    }
-    
-    // メッシュグリッド生成
+    // メッシュグリッド生成（アンカー回転を考慮）
     const worldPositions = [], texCoords = [];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     
+    // アンカーポイントの位置（0-1の範囲）
+    const anchorPosX = anchorX;
+    const anchorPosY = anchorY;
+    
     for (let i = 0; i <= N; i++) {
         for (let j = 0; j <= M; j++) {
-            const xRatio = j / M;
-            const yRatio = i / N;
-            const x = centerX[i] + (xRatio - 0.5) * width;
-            const y = centerY[i];
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
-            worldPositions.push(x, y);
+            const xRatio = j / M;  // 0-1
+            const yRatio = i / N;  // 0-1
+            
+            // テクスチャ座標（そのまま）
             texCoords.push(xRatio, yRatio);
+            
+            // ピクセル座標（画像中心基準）
+            const pixelX = (xRatio - 0.5) * width;
+            const pixelY = (yRatio - 0.5) * height;
+            
+            // アンカーポイントからの相対位置（ピクセル）
+            const anchorPixelX = (anchorPosX - 0.5) * width;
+            const anchorPixelY = (anchorPosY - 0.5) * height;
+            const relX = pixelX - anchorPixelX;
+            const relY = pixelY - anchorPixelY;
+            
+            // アンカー回転の逆回転を適用して、揺れ計算用のローカル座標に変換
+            const localX = relX * cosRot + relY * sinRot;
+            const localY = -relX * sinRot + relY * cosRot;
+            
+            // ローカル座標系でのY位置（0-1に正規化）
+            const normalizedLocalY = (localY / height) + 0.5;
+            
+            // ピンの影響を計算（ローカル座標系で）
+            let pinMultiplier = 1.0;
+            if (bounceParams.pins && bounceParams.pins.length > 0) {
+                let minMultiplier = 1.0;
+                for (const pin of bounceParams.pins) {
+                    const pinPos = pin.position / 100; // 0-1に変換
+                    const distance = Math.abs(normalizedLocalY - pinPos);
+                    const range = pin.range / 100; // 0-1に変換
+                    if (distance < range) {
+                        const normalizedDist = distance / range;
+                        const multiplier = bounceSmootherstep(0, 1, normalizedDist);
+                        minMultiplier = Math.min(minMultiplier, multiplier);
+                    }
+                }
+                pinMultiplier = minMultiplier;
+            }
+            
+            // アンカー位置からの距離を計算（ローカル座標系で）
+            let distanceFromAnchor;
+            let shouldSway = false;
+            
+            // ローカル座標系でのアンカー位置は常に0.5（中心）
+            const localAnchorY = 0.5;
+            
+            if (normalizedLocalY <= localAnchorY) {
+                // アンカーより上（ローカル座標系で）
+                const linearDist = localAnchorY > 0 ? (localAnchorY - normalizedLocalY) / localAnchorY : 0;
+                distanceFromAnchor = bounceSmoothstep(0, 1, linearDist);
+                shouldSway = (swayVerticalDirection === 'up' || swayVerticalDirection === 'both');
+            } else {
+                // アンカーより下（ローカル座標系で）
+                const linearDist = (1 - localAnchorY) > 0 ? (normalizedLocalY - localAnchorY) / (1 - localAnchorY) : 0;
+                distanceFromAnchor = bounceSmoothstep(0, 1, linearDist);
+                shouldSway = (swayVerticalDirection === 'down' || swayVerticalDirection === 'both');
+            }
+            
+            // 揺れオフセット（ローカルX方向）
+            const swayOffset = shouldSway ? bounceParams.swayAmplitude * swayWave * Math.pow(distanceFromAnchor, 1.2) * pinMultiplier : 0;
+            
+            // オフセットをワールド座標系に戻す（アンカー回転を適用）
+            const offsetWorldX = swayOffset * cosRot;
+            const offsetWorldY = swayOffset * sinRot;
+            
+            // 最終位置
+            const finalX = pixelX + offsetWorldX;
+            const finalY = pixelY + offsetWorldY;
+            
+            minX = Math.min(minX, finalX);
+            maxX = Math.max(maxX, finalX);
+            minY = Math.min(minY, finalY);
+            maxY = Math.max(maxY, finalY);
+            worldPositions.push(finalX, finalY);
         }
     }
     
@@ -407,13 +533,13 @@ function renderBounceWebGL(gl, img, mesh, canvasWidth, canvasHeight, originalWid
 }
 
 // ===== 揺れモーション適用 =====
-function applyBounceWebGL(layerCtx, img, width, height, localTime, bounceParams, animationStartTime, anchorX, anchorY) {
+function applyBounceWebGL(layerCtx, img, width, height, localTime, bounceParams, animationStartTime, anchorX, anchorY, anchorRotation = 0) {
     if (!bounceCanvas) initBounceWebGL();
     const gl = bounceGL;
     const canvas = bounceCanvas;
     
     // メッシュを生成してバウンディングボックスを取得
-    const meshData = createBounceMeshWithBounds(bounceParams, width, height, localTime, animationStartTime, anchorX, anchorY);
+    const meshData = createBounceMeshWithBounds(bounceParams, width, height, localTime, animationStartTime, anchorX, anchorY, anchorRotation);
     
     // バウンディングボックスのサイズを計算（余裕を持たせる）
     const padding = 200;
@@ -452,12 +578,15 @@ function drawBounceLayer(layer, localTime) {
         layer.bounceParams.pins = [];
     }
     
+    // ループモードかどうか
+    const isLoopMode = layer.bounceParams.loop === true;
+    
     // アクティブなキーフレームを探す
     let activeKeyframe = null;
     let animationStartTime = 0;
     
-    if (layer.bounceParams.keyframes && layer.bounceParams.keyframes.length > 0) {
-        // 現在のフレームより前で最も近いキーフレームを探す
+    if (!isLoopMode && layer.bounceParams.keyframes && layer.bounceParams.keyframes.length > 0) {
+        // 通常モード: 現在のフレームより前で最も近いキーフレームを探す
         const currentFrame = Math.floor(localTime * projectFPS);
         for (let i = layer.bounceParams.keyframes.length - 1; i >= 0; i--) {
             if (layer.bounceParams.keyframes[i].frame <= currentFrame) {
@@ -468,13 +597,80 @@ function drawBounceLayer(layer, localTime) {
         }
     }
     
-    // アクティブなキーフレームがない場合は通常描画
-    if (!activeKeyframe) {
-        // ===== デバッグ：通常描画時の状態 =====
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('[🖼️ DEBUG] 通常描画（キーフレームなし）');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    // ループモードの場合は常に揺れを適用
+    if (isLoopMode) {
+        // 揺れモーションを適用（ループモード）
+        const transform = getWorldTransformForLayer(layer);
         
+        // 現在のパラメータを使用（ループモード用）
+        const activeParams = {
+            type: layer.bounceParams.type,
+            amplitude: layer.bounceParams.amplitude,
+            swayAmplitude: layer.bounceParams.swayAmplitude,
+            frequency: layer.bounceParams.frequency,
+            dampingTime: layer.bounceParams.dampingTime,
+            bounceDirection: layer.bounceParams.bounceDirection || 'down',
+            swayDirection: layer.bounceParams.swayDirection,
+            swayVerticalDirection: layer.bounceParams.swayVerticalDirection || 'both',
+            loop: true,
+            loopPeriod: layer.bounceParams.loopPeriod || 1.0,
+            pins: layer.bounceParams.pins || [],
+            divisions: layer.bounceParams.divisions || 30
+        };
+        
+        const keyframeAnchorX = layer.anchorX;
+        const keyframeAnchorY = layer.anchorY;
+        const anchorRotation = layer.anchorRotation || 0;
+        const anchorOffsetX = keyframeAnchorX * layer.width;
+        const anchorOffsetY = keyframeAnchorY * layer.height;
+        
+        ctx.save();
+        ctx.globalAlpha = layer.opacity;
+        ctx.globalCompositeOperation = layer.blendMode;
+        
+        // 現在のレイヤー位置を使用（親の変換を含む + Wiggleオフセット）
+        const wiggleOffset = typeof getWiggleOffset === 'function' ? getWiggleOffset(layer, localTime) : { x: 0, y: 0 };
+        ctx.translate(transform.x + wiggleOffset.x, transform.y + wiggleOffset.y);
+        
+        // アンカーポイントを原点に移動
+        ctx.translate(anchorOffsetX - layer.width / 2, anchorOffsetY - layer.height / 2);
+        
+        // 回転（アンカーポイントを中心に）
+        ctx.rotate(transform.rotation * Math.PI / 180);
+        
+        // スケール（アンカーポイントを中心に）
+        ctx.scale(transform.scale, transform.scale);
+        
+        // 揺れモーション適用（ループモード: animationStartTime = 0）
+        applyBounceWebGL(ctx, layer.img, layer.width, layer.height, localTime, activeParams, 0, keyframeAnchorX, keyframeAnchorY, anchorRotation);
+        
+        // アンカーポイント表示 - 書き出し中は描画しない
+        if (typeof isExporting === 'undefined' || !isExporting) {
+            ctx.fillStyle = '#ffd700';  // 金色
+            ctx.strokeStyle = '#ffffff';  // 白
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // 十字線
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-25, 0);
+            ctx.lineTo(25, 0);
+            ctx.moveTo(0, -25);
+            ctx.lineTo(0, 25);
+            ctx.stroke();
+        }
+        
+        ctx.restore();
+        return;
+    }
+    
+    // アクティブなキーフレームがない場合は通常描画（非ループモード）
+    if (!activeKeyframe) {
         // 親からの累積トランスフォームを取得
         const transform = getWorldTransformForLayer(layer);
         
@@ -489,32 +685,6 @@ function drawBounceLayer(layer, localTime) {
         // アンカーポイントのオフセット（画像左上からアンカーまでの距離）
         const anchorOffsetX = layer.anchorX * layer.width;
         const anchorOffsetY = layer.anchorY * layer.height;
-        
-        console.log('📐 レイヤー情報:', {
-            'layer.x': layer.x.toFixed(2),
-            'layer.y': layer.y.toFixed(2),
-            'layer.anchorX': layer.anchorX.toFixed(4),
-            'layer.anchorY': layer.anchorY.toFixed(4)
-        });
-        console.log('📏 画像サイズ:', {
-            'layer.width': layer.width,
-            'layer.height': layer.height
-        });
-        console.log('📐 座標変換計算:', {
-            'transform.x': transform.x.toFixed(2),
-            'transform.y': transform.y.toFixed(2),
-            anchorOffsetX: anchorOffsetX.toFixed(2),
-            anchorOffsetY: anchorOffsetY.toFixed(2),
-            'width/2': (layer.width / 2).toFixed(2),
-            'height/2': (layer.height / 2).toFixed(2),
-            'translate_offset_x': (anchorOffsetX - layer.width / 2).toFixed(2),
-            'translate_offset_y': (anchorOffsetY - layer.height / 2).toFixed(2)
-        });
-        console.log('🎯 画像描画位置:', {
-            drawImageX: (-anchorOffsetX).toFixed(2),
-            drawImageY: (-anchorOffsetY).toFixed(2)
-        });
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         
         // アンカーポイントを原点に移動
         ctx.translate(anchorOffsetX - layer.width / 2, anchorOffsetY - layer.height / 2);
@@ -571,6 +741,7 @@ function drawBounceLayer(layer, localTime) {
     // 🔧 修正: 常に現在のレイヤーのアンカー座標を使用（いつでも再設定できるように）
     const keyframeAnchorX = layer.anchorX;
     const keyframeAnchorY = layer.anchorY;
+    const anchorRotation = layer.anchorRotation || 0;
     
     // アンカーポイントのオフセット（現在のアンカー座標を使用）
     const anchorOffsetX = keyframeAnchorX * layer.width;
@@ -643,7 +814,7 @@ function drawBounceLayer(layer, localTime) {
     ctx.scale(transform.scale, transform.scale);
     
     // 揺れモーション適用（キーフレームのアンカー座標を使用）
-    applyBounceWebGL(ctx, layer.img, layer.width, layer.height, localTime, activeParams, animationStartTime, keyframeAnchorX, keyframeAnchorY);
+    applyBounceWebGL(ctx, layer.img, layer.width, layer.height, localTime, activeParams, animationStartTime, keyframeAnchorX, keyframeAnchorY, anchorRotation);
     
     // アンカーポイント表示 - 書き出し中は描画しない
     if (typeof isExporting === 'undefined' || !isExporting) {

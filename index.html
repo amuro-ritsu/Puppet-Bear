@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>🐻 Puppet Bear v1.16.0</title>
+    <title>🐻 Puppet Bear v1.15.1</title>
     
     <!-- PWA メタタグ -->
     <meta name="description" content="Puppet Bear - パペットアニメーション編集ツール">
@@ -72,19 +72,6 @@
                         <button id="header-anchor-pick" onclick="startAnchorPointPick()" class="toolbar-btn" title="アンカーをクリックで設定">🎯 アンカー設定</button>
                         <button id="header-anchor-reset" onclick="resetAnchorPoint()" class="toolbar-btn toolbar-btn-small" title="アンカーを中央に戻す">↩️</button>
                     </div>
-                    <div class="toolbar-group toolbar-sliders" id="header-anchor-sliders">
-                        <label class="toolbar-slider-label">X:<span id="headerAnchorX">50</span>%
-                            <input type="range" class="toolbar-slider" id="header-anchor-x-slider" value="50" min="0" max="100" step="1"
-                                oninput="document.getElementById('headerAnchorX').textContent = this.value; setAnchorPointLive('x', parseFloat(this.value) / 100)">
-                        </label>
-                        <label class="toolbar-slider-label">Y:<span id="headerAnchorY">50</span>%
-                            <input type="range" class="toolbar-slider" id="header-anchor-y-slider" value="50" min="0" max="100" step="1"
-                                oninput="document.getElementById('headerAnchorY').textContent = this.value; setAnchorPointLive('y', parseFloat(this.value) / 100)">
-                        </label>
-                        <div style="font-size: 10px; color: #ff9800; margin-top: 4px; padding: 4px 8px; background: rgba(255, 152, 0, 0.1); border-radius: 4px; text-align: center; white-space: nowrap;">
-                            ⚠️ トランスフォーム前に設定
-                        </div>
-                    </div>
                     <div class="toolbar-separator"></div>
                     <label class="toolbar-checkbox">
                         <input type="checkbox" id="show-pins-checkbox" checked>
@@ -98,6 +85,28 @@
                         <button onclick="zoomCanvas(0.1)" class="toolbar-btn toolbar-btn-small" title="拡大">➕</button>
                         <button onclick="resetCanvasZoom()" class="toolbar-btn toolbar-btn-small" title="リセット">↺</button>
                         <button onclick="fitCanvasToView()" class="toolbar-btn toolbar-btn-small" title="画面にフィット">⬜</button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <!-- アンカースライダー（大きく配置） -->
+                    <div class="toolbar-group" id="header-anchor-sliders" style="display: flex; gap: 12px; align-items: center;">
+                        <label class="toolbar-slider-label" style="display: flex; align-items: center; gap: 4px; min-width: 140px;">
+                            <span style="white-space: nowrap;">⚓X:<span id="headerAnchorX">50</span>%</span>
+                            <input type="range" class="toolbar-slider" id="header-anchor-x-slider" value="50" min="0" max="100" step="1"
+                                style="width: 100px; cursor: pointer;"
+                                oninput="document.getElementById('headerAnchorX').textContent = this.value; setAnchorPointLive('x', parseFloat(this.value) / 100)">
+                        </label>
+                        <label class="toolbar-slider-label" style="display: flex; align-items: center; gap: 4px; min-width: 140px;">
+                            <span style="white-space: nowrap;">⚓Y:<span id="headerAnchorY">50</span>%</span>
+                            <input type="range" class="toolbar-slider" id="header-anchor-y-slider" value="50" min="0" max="100" step="1"
+                                style="width: 100px; cursor: pointer;"
+                                oninput="document.getElementById('headerAnchorY').textContent = this.value; setAnchorPointLive('y', parseFloat(this.value) / 100)">
+                        </label>
+                        <label class="toolbar-slider-label" style="display: flex; align-items: center; gap: 4px; min-width: 160px;" title="揺れエフェクトの軸方向">
+                            <span style="white-space: nowrap;">🔄軸:<span id="headerAnchorRot">0</span>°</span>
+                            <input type="range" class="toolbar-slider" id="header-anchor-rot-slider" value="0" min="-180" max="180" step="1"
+                                style="width: 100px; cursor: pointer;"
+                                oninput="document.getElementById('headerAnchorRot').textContent = this.value; setAnchorRotation(parseFloat(this.value))">
+                        </label>
                     </div>
                 </div>
                 
@@ -188,7 +197,6 @@
     <script src="app-walking.js"></script>
     <script src="app-puppet.js"></script>
     <script src="app-audio.js"></script>
-    <script src="app-blink.js"></script>
     <script src="app-timeline.js"></script>
     <script src="app-animation.js"></script>
     <script src="app-layers.js"></script>

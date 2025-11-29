@@ -1,5 +1,5 @@
 /**
- * ⭐ Starlit Puppet Editor v1.10.3
+ * ⭐ Starlit Puppet Editor v1.10.4
  * コア機能 - レイヤー管理・描画
  * - パペットレイヤーの軸アンカー描画でアンカーオフセットを考慮
  * - フォルダ間親子関係の描画対応
@@ -127,6 +127,13 @@ function render() {
                 // 子レイヤーを通常通り描画（子レイヤー自身が描画される）
                 // フォルダ自体は何も描画しない
             }
+            return;
+        }
+        
+        // ジャンプフォルダーの場合（描画は子レイヤー側で行う）
+        if (layer.type === 'jumpFolder') {
+            // ジャンプフォルダー自体は何も描画しない
+            // 子レイヤーの描画時にジャンプオフセットを適用
             return;
         }
         
@@ -272,8 +279,11 @@ function render() {
         // 追従中でもオフセットが必要な場合はここで適用（現在は無視）
         
         // アンカーポイントのオフセット（画像左上からアンカーまでの距離）
-        const anchorOffsetX = layer.anchorX * layer.width;
-        const anchorOffsetY = layer.anchorY * layer.height;
+        // anchorXがundefinedの場合は0.5（中央）をデフォルトとする
+        const anchorX = layer.anchorX !== undefined ? layer.anchorX : 0.5;
+        const anchorY = layer.anchorY !== undefined ? layer.anchorY : 0.5;
+        const anchorOffsetX = anchorX * layer.width;
+        const anchorOffsetY = anchorY * layer.height;
         
         // アンカーポイントを原点に移動
         targetCtx.translate(anchorOffsetX - layer.width / 2, anchorOffsetY - layer.height / 2);
@@ -319,27 +329,7 @@ function render() {
             );
         }
         
-        // アンカーポイントを常に表示（風揺れON/OFF関係なく）- 書き出し中は描画しない
-        if (typeof isExporting === 'undefined' || !isExporting) {
-            // アンカーポイントの円
-            targetCtx.fillStyle = '#ff6b6b';
-            targetCtx.strokeStyle = '#ffffff';
-            targetCtx.lineWidth = 3;
-            targetCtx.beginPath();
-            targetCtx.arc(0, 0, 10, 0, Math.PI * 2);
-            targetCtx.fill();
-            targetCtx.stroke();
-            
-            // 十字線（大きく）
-            targetCtx.strokeStyle = '#ff6b6b';
-            targetCtx.lineWidth = 3;
-            targetCtx.beginPath();
-            targetCtx.moveTo(-25, 0);
-            targetCtx.lineTo(25, 0);
-            targetCtx.moveTo(0, -25);
-            targetCtx.lineTo(0, 25);
-            targetCtx.stroke();
-        }
+        // アンカーポイントは最前面で一括描画するため、ここでは描画しない
         
         if (useClipping) {
             tempCtx.restore();
@@ -380,7 +370,233 @@ function render() {
         drawPuppetAnchorElements();
     }
     
+    // ★★★ 選択中レイヤーのアンカーポイントを最前面に描画 ★★★
+    if (typeof isExporting === 'undefined' || !isExporting) {
+        drawSelectedLayerAnchors(localTime);
+    }
+    
     // 回転ハンドルは不要（ドラッグで回転できるため削除）
+}
+
+// ===== 選択中レイヤーのアンカーポイントを最前面に描画 =====
+function drawSelectedLayerAnchors(localTime) {
+    if (selectedLayerIds.length === 0) return;
+    
+    selectedLayerIds.forEach((layerId, index) => {
+        const layer = layers.find(l => l.id === layerId);
+        if (!layer || !layer.visible) return;
+        
+        // 音声レイヤーはスキップ
+        if (layer.type === 'audio') return;
+        
+        ctx.save();
+        
+        // レイヤータイプごとのランダム色を生成（レイヤーIDをシードに）
+        const hue = (layerId * 137) % 360; // 黄金角を使ったランダム色
+        const anchorColor = `hsl(${hue}, 100%, 50%)`;
+        const anchorColorDark = `hsl(${hue}, 100%, 35%)`;
+        
+        let anchorPos;
+        
+        // フォルダーまたはジャンプフォルダーの場合
+        if (layer.type === 'folder' || layer.type === 'jumpFolder') {
+            // 親のトランスフォームを取得
+            const parentTransform = getParentTransform(layer.parentLayerId);
+            
+            // アンカーオフセットを計算
+            let anchorOffsetX = layer.anchorOffsetX || 0;
+            let anchorOffsetY = layer.anchorOffsetY || 0;
+            
+            // 基準レイヤーがある場合はそのアンカーを使用
+            if (layer.anchorReferenceLayerId) {
+                const refLayer = layers.find(l => l.id === layer.anchorReferenceLayerId);
+                if (refLayer) {
+                    const refAnchor = getLayerAnchorOffset(refLayer);
+                    // 基準レイヤーの位置 + アンカーオフセット（フォルダのローカル座標系）
+                    // ※ キーフレーム補間後も相対座標になっているはず
+                    anchorOffsetX = refLayer.x + refAnchor.offsetX;
+                    anchorOffsetY = refLayer.y + refAnchor.offsetY;
+                }
+            }
+            
+            // フォルダの位置 + 親のトランスフォーム + アンカーオフセット
+            // ただしアンカーオフセットはフォルダのスケール・回転を適用する前の座標
+            const folderWorldX = layer.x + parentTransform.x;
+            const folderWorldY = layer.y + parentTransform.y;
+            
+            // アンカー位置をワールド座標に変換
+            const rad = (layer.rotation + parentTransform.rotation) * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            const scale = layer.scale * parentTransform.scale;
+            
+            anchorPos = {
+                x: folderWorldX + anchorOffsetX,
+                y: folderWorldY + anchorOffsetY,
+                rotation: layer.rotation + parentTransform.rotation,
+                scale: scale
+            };
+        } else {
+            // 通常のレイヤー
+            anchorPos = getLayerAnchorWorldPosition(layer, localTime);
+        }
+        
+        if (!anchorPos) {
+            ctx.restore();
+            return;
+        }
+        
+        ctx.translate(anchorPos.x, anchorPos.y);
+        ctx.rotate(anchorPos.rotation * Math.PI / 180);
+        ctx.scale(anchorPos.scale, anchorPos.scale);
+        
+        // アンカー回転を取得して十字マークに適用
+        const anchorRotation = layer.anchorRotation || 0;
+        
+        // アンカーポイントの円（大きく目立つように）
+        ctx.fillStyle = anchorColor;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4 / anchorPos.scale;
+        ctx.beginPath();
+        ctx.arc(0, 0, 14 / anchorPos.scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // アンカー回転を適用してから十字線を描画
+        ctx.save();
+        ctx.rotate(anchorRotation * Math.PI / 180);
+        
+        // 十字線（大きく目立つように）
+        ctx.strokeStyle = anchorColorDark;
+        ctx.lineWidth = 4 / anchorPos.scale;
+        ctx.beginPath();
+        ctx.moveTo(-30 / anchorPos.scale, 0);
+        ctx.lineTo(30 / anchorPos.scale, 0);
+        ctx.moveTo(0, -30 / anchorPos.scale);
+        ctx.lineTo(0, 30 / anchorPos.scale);
+        ctx.stroke();
+        
+        // 白いアウトライン
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2 / anchorPos.scale;
+        ctx.beginPath();
+        ctx.moveTo(-30 / anchorPos.scale, 0);
+        ctx.lineTo(30 / anchorPos.scale, 0);
+        ctx.moveTo(0, -30 / anchorPos.scale);
+        ctx.lineTo(0, 30 / anchorPos.scale);
+        ctx.stroke();
+        
+        ctx.restore(); // アンカー回転を戻す
+        
+        ctx.restore(); // メインの変換を戻す
+    });
+}
+
+// ===== レイヤーのアンカーオフセットを取得（ローカル座標系） =====
+function getLayerAnchorOffset(layer) {
+    if (!layer) return { offsetX: 0, offsetY: 0 };
+    
+    // レイヤータイプに応じたサイズ取得
+    let layerWidth = 0, layerHeight = 0;
+    let anchorX = 0.5, anchorY = 0.5;
+    
+    if (layer.type === 'puppet' || layer.type === 'bounce') {
+        if (layer.img) {
+            layerWidth = layer.img.width;
+            layerHeight = layer.img.height;
+        }
+        anchorX = layer.anchorX !== undefined ? layer.anchorX : 0.5;
+        anchorY = layer.anchorY !== undefined ? layer.anchorY : 0.5;
+    } else if (layer.type === 'lipsync' || layer.type === 'blink' || layer.type === 'sequence' || layer.type === 'crosssection') {
+        if (layer.sequenceImages && layer.sequenceImages.length > 0) {
+            layerWidth = layer.sequenceImages[0].width;
+            layerHeight = layer.sequenceImages[0].height;
+        }
+        anchorX = layer.anchorX !== undefined ? layer.anchorX : 0.5;
+        anchorY = layer.anchorY !== undefined ? layer.anchorY : 0.5;
+    } else if (layer.type === 'image') {
+        layerWidth = layer.width || 0;
+        layerHeight = layer.height || 0;
+        anchorX = layer.anchorX !== undefined ? layer.anchorX : 0.5;
+        anchorY = layer.anchorY !== undefined ? layer.anchorY : 0.5;
+    }
+    
+    // アンカーオフセット（画像の中心からアンカーまでの距離）
+    const offsetX = (anchorX - 0.5) * layerWidth;
+    const offsetY = (anchorY - 0.5) * layerHeight;
+    
+    return { offsetX, offsetY };
+}
+
+// ===== レイヤーのアンカーポイントのワールド座標を取得 =====
+function getLayerAnchorWorldPosition(layer, localTime) {
+    if (!layer) return null;
+    
+    // 親の変形を取得
+    const parentTransform = getParentTransform(layer.parentLayerId);
+    
+    // 子のローカル座標を親の回転・スケールで変換
+    const parentRad = parentTransform.rotation * Math.PI / 180;
+    const parentCos = Math.cos(parentRad);
+    const parentSin = Math.sin(parentRad);
+    
+    // Wiggleオフセットを取得
+    const wiggleOffset = typeof getWiggleOffset === 'function' ? getWiggleOffset(layer, localTime) : { x: 0, y: 0 };
+    const layerX = layer.x + wiggleOffset.x;
+    const layerY = layer.y + wiggleOffset.y;
+    
+    const transformedLayerX = layerX * parentTransform.scale * parentCos - layerY * parentTransform.scale * parentSin;
+    const transformedLayerY = layerX * parentTransform.scale * parentSin + layerY * parentTransform.scale * parentCos;
+    
+    let finalX = parentTransform.x + transformedLayerX;
+    let finalY = parentTransform.y + transformedLayerY;
+    const finalRotation = layer.rotation + parentTransform.rotation;
+    const finalScale = layer.scale * parentTransform.scale;
+    
+    // レイヤータイプに応じたサイズ取得
+    let layerWidth, layerHeight;
+    if (layer.type === 'puppet' || layer.type === 'bounce') {
+        if (layer.img) {
+            layerWidth = layer.img.width;
+            layerHeight = layer.img.height;
+        } else {
+            return null;
+        }
+    } else if (layer.type === 'lipsync' || layer.type === 'blink' || layer.type === 'sequence' || layer.type === 'crosssection') {
+        if (layer.sequenceImages && layer.sequenceImages.length > 0) {
+            layerWidth = layer.sequenceImages[0].width;
+            layerHeight = layer.sequenceImages[0].height;
+        } else {
+            return null;
+        }
+    } else {
+        layerWidth = layer.width;
+        layerHeight = layer.height;
+    }
+    
+    if (!layerWidth || !layerHeight) return null;
+    
+    // アンカーオフセットを計算
+    const anchorX = layer.anchorX !== undefined ? layer.anchorX : 0.5;
+    const anchorY = layer.anchorY !== undefined ? layer.anchorY : 0.5;
+    const anchorOffsetX = anchorX * layerWidth;
+    const anchorOffsetY = anchorY * layerHeight;
+    
+    // アンカーオフセットを回転させて加算
+    const offsetX = (anchorOffsetX - layerWidth / 2) * finalScale;
+    const offsetY = (anchorOffsetY - layerHeight / 2) * finalScale;
+    const rotatedOffsetX = offsetX * parentCos - offsetY * parentSin;
+    const rotatedOffsetY = offsetX * parentSin + offsetY * parentCos;
+    
+    finalX += rotatedOffsetX;
+    finalY += rotatedOffsetY;
+    
+    return {
+        x: finalX,
+        y: finalY,
+        rotation: finalRotation,
+        scale: finalScale
+    };
 }
 
 // ===== 口パクレイヤー描画 =====
@@ -511,83 +727,34 @@ function drawBlinkLayer(layer, time) {
     // レイヤーの位置に移動
     ctx.translate(layer.x, layer.y);
     
-    // 現在のフレーム番号を計算
-    const projectFps = typeof projectFPS !== "undefined" ? projectFPS : 30;
-    const currentFrame = Math.floor(time * projectFps);
-    const blinkFps = layer.fps || 12;
+    // 現在表示すべき画像を決定
+    let currentImg = layer.sequenceImages[0]; // デフォルトは開いた目（最初のフレーム）
+    let width = layer.sequenceImages[0].width;
+    let height = layer.sequenceImages[0].height;
     
-    // デフォルト表情（指定されていれば使う、なければ0）
-    let displayIndex = layer.useLastExpression ? (layer.lastExpressionIndex || 0) : 0;
+    // 現在のフレーム番号を計算（30fps想定）
+    const currentFrame = Math.floor(time * (typeof projectFPS !== "undefined" ? projectFPS : 30));
     
-    // キーフレームを時間順にソート
+    // まばたきアニメーション中かチェック
     const sortedKeyframes = (layer.keyframes || []).slice().sort((a, b) => a.frame - b.frame);
     
-    // まばたき中かどうかのフラグ
-    let isBlinking = false;
-    
-    // 現在アクティブなキーフレームを探す
-    for (let i = sortedKeyframes.length - 1; i >= 0; i--) {
-        const kf = sortedKeyframes[i];
-        if (currentFrame < kf.frame) continue;
-        
-        const framesSinceStart = currentFrame - kf.frame;
-        
-        // まばたきキーフレーム
-        if (kf.type === 'blink' || !kf.type) {
-            const totalAnimFrames = (layer.sequenceImages.length - 1) * (projectFps / blinkFps);
+    for (const kf of sortedKeyframes) {
+        if (currentFrame >= kf.frame) {
+            const framesSinceStart = currentFrame - kf.frame;
+            const fps = layer.fps || 12;
+            const totalAnimFrames = (layer.sequenceImages.length - 1) * (30 / fps);
             
+            // まばたきアニメーションの長さ内ならアニメーション再生
             if (framesSinceStart < totalAnimFrames) {
-                // まばたきアニメーション中
-                const seqIndex = Math.floor(framesSinceStart * blinkFps / projectFps);
+                const seqIndex = Math.floor(framesSinceStart * fps / 30);
                 if (seqIndex < layer.sequenceImages.length - 1) {
-                    displayIndex = seqIndex + 1; // +1で開いた目をスキップ
-                    isBlinking = true;
+                    currentImg = layer.sequenceImages[seqIndex + 1]; // +1 で開いた目をスキップ
+                    width = currentImg.width;
+                    height = currentImg.height;
                 }
             }
-            // まばたきが終わった場合はデフォルト表情に戻る（displayIndexはそのまま）
-            break;
-        }
-        
-        // 表情キーフレーム
-        if (kf.type === 'expression') {
-            const startIndex = kf.startExpressionIndex !== undefined ? kf.startExpressionIndex : 0;
-            const targetIndex = kf.expressionIndex;
-            const steps = Math.abs(targetIndex - startIndex);
-            
-            console.log('🎭 表情遷移: frame=', currentFrame, 'kf.frame=', kf.frame, 'start=', startIndex, 'target=', targetIndex, 'steps=', steps, 'framesSince=', framesSinceStart);
-            
-            if (steps === 0) {
-                displayIndex = targetIndex;
-                console.log('🎭 steps=0, displayIndex=', displayIndex);
-            } else {
-                const direction = targetIndex > startIndex ? 1 : -1;
-                const framesPerStep = Math.max(1, Math.round(projectFps / blinkFps));
-                const totalAnimFrames = steps * framesPerStep;
-                
-                console.log('🎭 direction=', direction, 'framesPerStep=', framesPerStep, 'totalAnimFrames=', totalAnimFrames);
-                
-                if (framesSinceStart >= totalAnimFrames) {
-                    // 遷移完了
-                    displayIndex = targetIndex;
-                    console.log('🎭 遷移完了, displayIndex=', displayIndex);
-                } else {
-                    // 遷移中
-                    const stepIndex = Math.floor(framesSinceStart / framesPerStep);
-                    displayIndex = startIndex + (direction * Math.min(stepIndex + 1, steps));
-                    console.log('🎭 遷移中, stepIndex=', stepIndex, 'displayIndex=', displayIndex);
-                }
-            }
-            break;
         }
     }
-    
-    // インデックスを範囲内に収める
-    displayIndex = Math.max(0, Math.min(displayIndex, layer.sequenceImages.length - 1));
-    
-    // 表示する画像
-    const currentImg = layer.sequenceImages[displayIndex];
-    const width = currentImg.width;
-    const height = currentImg.height;
     
     // アンカーポイントのオフセット
     const anchorOffsetX = layer.anchorX * width;
@@ -735,6 +902,59 @@ function drawSequenceLayer(layer, localTime) {
     ctx.restore();
 }
 
+// ===== 親のトランスフォームを取得（累積） =====
+function getParentTransform(parentLayerId) {
+    let result = { x: 0, y: 0, rotation: 0, scale: 1 };
+    
+    if (!parentLayerId) return result;
+    
+    let parent = layers.find(l => l.id === parentLayerId);
+    while (parent) {
+        // 親の回転を考慮して座標を変換
+        const rad = result.rotation * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        
+        // 親の位置を取得
+        let parentX = parent.x;
+        let parentY = parent.y;
+        
+        // フォルダまたはジャンプフォルダーの歩行アニメーションオフセット
+        if ((parent.type === 'folder' || parent.type === 'jumpFolder') && parent.walkingEnabled && typeof calculateWalkingOffset === 'function') {
+            const walkingOffset = calculateWalkingOffset(parent, currentTime);
+            if (walkingOffset.active) {
+                parentX += walkingOffset.x;
+                parentY += walkingOffset.y;
+            }
+        }
+        
+        // ジャンプフォルダーのジャンプオフセット
+        if (parent.type === 'jumpFolder' && typeof calculateJumpOffset === 'function') {
+            const jumpOffset = calculateJumpOffset(parent, currentTime);
+            parentX += jumpOffset.x;
+            parentY += jumpOffset.y;
+        }
+        
+        // 現在の累積座標に親の変形を適用
+        const scaledX = result.x * parent.scale;
+        const scaledY = result.y * parent.scale;
+        const parentRad = parent.rotation * Math.PI / 180;
+        const parentCos = Math.cos(parentRad);
+        const parentSin = Math.sin(parentRad);
+        const rotatedX = scaledX * parentCos - scaledY * parentSin;
+        const rotatedY = scaledX * parentSin + scaledY * parentCos;
+        
+        result.x = parentX + rotatedX;
+        result.y = parentY + rotatedY;
+        result.rotation += parent.rotation;
+        result.scale *= parent.scale;
+        
+        parent = layers.find(l => l.id === parent.parentLayerId);
+    }
+    
+    return result;
+}
+
 // ===== 親の変形を適用 =====
 function applyParentTransform(layer) {
     // パペットアンカーに追従する場合
@@ -757,8 +977,19 @@ function applyParentTransform(layer) {
     
     // フォルダの場合（ピクセルオフセットでアンカー計算）
     if (parent.type === 'folder') {
-        const anchorOffsetX = parent.anchorOffsetX || 0;
-        const anchorOffsetY = parent.anchorOffsetY || 0;
+        // アンカー基準レイヤーがある場合はそのアンカーを使用
+        let anchorOffsetX = parent.anchorOffsetX || 0;
+        let anchorOffsetY = parent.anchorOffsetY || 0;
+        
+        if (parent.anchorReferenceLayerId) {
+            const refLayer = layers.find(l => l.id === parent.anchorReferenceLayerId);
+            if (refLayer) {
+                const refAnchor = getLayerAnchorOffset(refLayer);
+                // 基準レイヤーの位置 + アンカーオフセット
+                anchorOffsetX = refLayer.x + refAnchor.offsetX;
+                anchorOffsetY = refLayer.y + refAnchor.offsetY;
+            }
+        }
         
         // 歩行アニメーションのオフセットを適用
         if (parent.walkingEnabled && typeof calculateWalkingOffset === 'function') {
@@ -768,10 +999,39 @@ function applyParentTransform(layer) {
             }
         }
         
-        // アンカーポイントを原点に移動
+        // アンカーポイントを原点に移動して回転・スケール、その後戻す
         ctx.translate(anchorOffsetX, anchorOffsetY);
         ctx.rotate(parent.rotation * Math.PI / 180);
         ctx.scale(parent.scale, parent.scale);
+        ctx.translate(-anchorOffsetX, -anchorOffsetY);
+        return;
+    }
+    
+    // ジャンプフォルダーの場合
+    if (parent.type === 'jumpFolder') {
+        // アンカー基準レイヤーがある場合はそのアンカーを使用
+        let anchorOffsetX = parent.anchorOffsetX || 0;
+        let anchorOffsetY = parent.anchorOffsetY || 0;
+        
+        if (parent.anchorReferenceLayerId) {
+            const refLayer = layers.find(l => l.id === parent.anchorReferenceLayerId);
+            if (refLayer) {
+                const refAnchor = getLayerAnchorOffset(refLayer);
+                // 基準レイヤーの位置 + アンカーオフセット
+                anchorOffsetX = refLayer.x + refAnchor.offsetX;
+                anchorOffsetY = refLayer.y + refAnchor.offsetY;
+            }
+        }
+        
+        // ジャンプオフセットを計算して適用（X/Y両方）
+        const jumpOffset = calculateJumpOffset(parent, currentTime);
+        ctx.translate(jumpOffset.x, jumpOffset.y);
+        
+        // アンカーポイントを原点に移動して回転・スケール、その後戻す
+        ctx.translate(anchorOffsetX, anchorOffsetY);
+        ctx.rotate(parent.rotation * Math.PI / 180);
+        ctx.scale(parent.scale, parent.scale);
+        ctx.translate(-anchorOffsetX, -anchorOffsetY);
         return;
     }
     
@@ -912,4 +1172,91 @@ function drawFolderWithWindSway(folder, localTime) {
         
         ctx.restore();
     });
+}
+
+// ===== ジャンプオフセット計算 =====
+function calculateJumpOffset(jumpFolder, localTime) {
+    if (!jumpFolder || jumpFolder.type !== 'jumpFolder') return { x: 0, y: 0 };
+    if (!jumpFolder.jumpParams) return { x: 0, y: 0 };
+    
+    const jp = jumpFolder.jumpParams;
+    const direction = jp.direction || 'up';
+    
+    let offsetValue = 0;
+    
+    // ループモードの場合
+    if (jp.loop) {
+        const period = jp.loopPeriod || 1.0;
+        const omega = 2 * Math.PI / period;
+        // サイン波で移動
+        const wave = Math.sin(omega * localTime);
+        offsetValue = Math.abs(wave) * jp.amplitude;
+    } else {
+        // 通常モード（キーフレームベース）
+        if (!jp.keyframes || jp.keyframes.length === 0) {
+            return { x: 0, y: 0 };
+        }
+        
+        // アクティブなキーフレームを探す（現在のフレームより前で最も近いもの）
+        const fps = typeof projectFPS !== 'undefined' ? projectFPS : 24;
+        const currentFrameNum = Math.floor(localTime * fps);
+        
+        let activeKeyframe = null;
+        for (let i = jp.keyframes.length - 1; i >= 0; i--) {
+            if (jp.keyframes[i].frame <= currentFrameNum) {
+                activeKeyframe = jp.keyframes[i];
+                break;
+            }
+        }
+        
+        if (!activeKeyframe) {
+            return { x: 0, y: 0 };
+        }
+        
+        // キーフレームからの経過時間を計算
+        const keyframeTime = activeKeyframe.frame / fps;
+        const elapsedTime = localTime - keyframeTime;
+        
+        if (elapsedTime < 0) {
+            return { x: 0, y: 0 };
+        }
+        
+        // 減衰付き弾みアニメーション
+        const damping = Math.exp(-5 * (elapsedTime / jp.dampingTime));
+        const omega = 2 * Math.PI * jp.frequency / jp.dampingTime;
+        const wave = Math.sin(omega * elapsedTime) * damping;
+        
+        offsetValue = Math.abs(wave) * jp.amplitude;
+    }
+    
+    // 方向に応じてローカル座標系でのオフセットを決定
+    let localX = 0, localY = 0;
+    switch (direction) {
+        case 'up':
+            localX = 0; localY = -offsetValue;
+            break;
+        case 'down':
+            localX = 0; localY = offsetValue;
+            break;
+        case 'left':
+            localX = -offsetValue; localY = 0;
+            break;
+        case 'right':
+            localX = offsetValue; localY = 0;
+            break;
+        default:
+            localX = 0; localY = -offsetValue;
+    }
+    
+    // フォルダの回転を考慮してワールド座標系に変換
+    const folderRotation = jumpFolder.rotation || 0;
+    const rad = folderRotation * Math.PI / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    
+    // 回転行列を適用
+    const worldX = localX * cos - localY * sin;
+    const worldY = localX * sin + localY * cos;
+    
+    return { x: worldX, y: worldY };
 }

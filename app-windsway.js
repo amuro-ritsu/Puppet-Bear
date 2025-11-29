@@ -32,9 +32,9 @@ let boundsCalculationCtx = null;
 function getDefaultWindSwayParams() {
     return {
         divisions: 30, // より滑らかな変形のため分割数を増やす
-        angle: 30,
+        angle: 11,
         period: 2.0,
-        phaseShift: 90,
+        phaseShift: -11,
         center: 0,
         topFixed: 10,
         bottomFixed: 10,
@@ -43,7 +43,10 @@ function getDefaultWindSwayParams() {
         randomPattern: 5,
         seed: 12345,
         pins: [],
-        useContentBounds: true // 描画範囲に応じたスケーリングを有効化
+        useContentBounds: true, // 描画範囲に応じたスケーリングを有効化
+        loop: true, // ループモード（デフォルトON）
+        dampingTime: 1.0, // 減衰時間（秒）- ループOFF時に使用
+        frequency: 3 // 揺れ回数 - ループOFF時に使用
     };
 }
 
@@ -273,11 +276,40 @@ function calculateContentBounds(img) {
 }
 
 // ===== 風揺れメッシュ生成（描画範囲ベースの変形） =====
-function createWindShakeMeshWithBounds(ws, width, height, t, anchorX, anchorY, img = null) {
+function createWindShakeMeshWithBounds(ws, width, height, t, anchorX, anchorY, img = null, anchorRotation = 0, animationStartTime = 0) {
+    // 分割数を増やして滑らかに（アンカー回転時は特に重要）
     let N = Math.floor(ws.divisions);
     if (N < 1) N = 1;
-    if (N > 50) N = 50;
-    const M = 8; // 固定
+    if (N > 80) N = 80;
+    
+    // アンカー回転がある場合は水平方向の分割も増やす
+    let M = anchorRotation !== 0 ? Math.max(20, N) : 10;
+    
+    // アンカー回転をラジアンに変換
+    const anchorRotRad = anchorRotation * Math.PI / 180;
+    const cosRot = Math.cos(anchorRotRad);
+    const sinRot = Math.sin(anchorRotRad);
+    
+    // ループモードかどうか
+    const isLoopMode = ws.loop !== false; // デフォルトはループON
+    
+    // 減衰計算
+    let damping = 1.0;
+    let effectiveTime = t;
+    
+    if (!isLoopMode) {
+        // 減衰モード: キーフレームからの経過時間で減衰
+        const elapsedTime = t - animationStartTime;
+        if (elapsedTime < 0) {
+            damping = 0; // アニメーション開始前は揺れなし
+        } else {
+            const dampingTime = ws.dampingTime || 1.0;
+            damping = Math.exp(-5 * (elapsedTime / dampingTime));
+            // 減衰モードでは経過時間ベースの周波数を使用
+            const frequency = ws.frequency || 3;
+            effectiveTime = elapsedTime;
+        }
+    }
     
     // 描画範囲を取得
     let contentTop = 0;
@@ -293,17 +325,24 @@ function createWindShakeMeshWithBounds(ws, width, height, t, anchorX, anchorY, i
     
     const F = Math.PI * ws.angle / 180;
     const dt = ws.period;
-    const c = 2 * Math.PI / dt;
-    const d = 2 * ws.phaseShift * Math.PI / 180;
+    let c, d;
+    
+    if (!isLoopMode) {
+        // 減衰モード: frequency と dampingTime を使用
+        const frequency = ws.frequency || 3;
+        const dampingTime = ws.dampingTime || 1.0;
+        c = 2 * Math.PI * frequency / dampingTime;
+    } else {
+        // ループモード: period を使用
+        c = 2 * Math.PI / dt;
+    }
+    d = 2 * ws.phaseShift * Math.PI / 180;
     const CNT = ws.center * Math.PI / 180;
     
-    // アンカーポイントを固定点として使用
-    const anchorYPos = anchorY; // 0-1の範囲
-    
-    // ランダム揺れ
+    // ランダム揺れ（ループモードのみ）
     let currentF = F;
-    if (ws.randomSwing) {
-        const s = t / ws.period;
+    if (isLoopMode && ws.randomSwing) {
+        const s = effectiveTime / ws.period;
         const n1 = Math.floor(s);
         const frac = s - n1;
         const f0 = getRandomValue(n1 - 1, ws.seed, ws.randomPattern) * F;
@@ -313,98 +352,105 @@ function createWindShakeMeshWithBounds(ws, width, height, t, anchorX, anchorY, i
         currentF = cubicInterpolation(frac, f0, f1, f2, f3);
     }
     
-    // 中心線計算（アンカーポイントから上下に分けて計算）
-    const centerX = [], centerY = [];
+    // 減衰を適用
+    currentF = currentF * damping;
     
-    for (let i = 0; i <= N; i++) {
-        const ratio = i / N;
-        const yInTexture = ratio; // テクスチャ座標系（0-1）
-        
-        // ピンの影響
-        let pinMultiplier = 1.0;
-        if (ws.pins && ws.pins.length > 0) {
-            let minMultiplier = 1.0;
-            for (const pin of ws.pins) {
-                const pinPos = pin.position / 100;
-                const distance = Math.abs(ratio - pinPos);
-                const range = pin.range / 100;
-                if (distance < range) {
-                    const normalizedDist = distance / range;
-                    const multiplier = smootherstep(0, 1, normalizedDist);
-                    minMultiplier = Math.min(minMultiplier, multiplier);
-                }
-            }
-            pinMultiplier = minMultiplier;
-        }
-        
-        // ★ 描画範囲内での相対位置を計算 ★
-        // yInTextureが描画範囲外なら揺れを0にする
-        let swayStrength = 0;
-        
-        if (yInTexture >= contentTop && yInTexture <= contentBottom) {
-            // 描画範囲内での正規化された位置（0-1）
-            const normalizedYInContent = (yInTexture - contentTop) / (contentBottom - contentTop);
-            
-            // アンカーポイントを描画範囲内での位置に変換
-            let anchorInContent;
-            if (anchorYPos >= contentTop && anchorYPos <= contentBottom) {
-                anchorInContent = (anchorYPos - contentTop) / (contentBottom - contentTop);
-            } else if (anchorYPos < contentTop) {
-                anchorInContent = 0;
-            } else {
-                anchorInContent = 1;
-            }
-            
-            // アンカーポイントからの距離に応じて揺れの強さを計算
-            if (normalizedYInContent <= anchorInContent) {
-                // アンカーより上
-                if (anchorInContent > 0) {
-                    const distanceFromAnchor = anchorInContent - normalizedYInContent;
-                    const linearStrength = distanceFromAnchor / anchorInContent;
-                    swayStrength = smoothstep(0, 1, linearStrength);
-                }
-            } else {
-                // アンカーより下
-                if (anchorInContent < 1) {
-                    const distanceFromAnchor = normalizedYInContent - anchorInContent;
-                    const linearStrength = distanceFromAnchor / (1 - anchorInContent);
-                    swayStrength = smoothstep(0, 1, linearStrength);
-                }
-            }
-        }
-        
-        // 揺れの計算（描画範囲内での位相を使用）
-        const contentPhaseIndex = (yInTexture - contentTop) / (contentBottom - contentTop) * N;
-        const Si = (currentF * Math.sin(c * t - contentPhaseIndex * d / N) + CNT) * swayStrength * pinMultiplier;
-        
-        // X座標の計算（前の点からの相対位置）
-        if (i === 0) {
-            centerX[0] = 0;
-        } else {
-            const segmentLength = height / N;
-            centerX[i] = centerX[i - 1] + Math.sin(Si) * segmentLength;
-        }
-        
-        // Y座標（中心を0とした座標系）
-        centerY[i] = (ratio - 0.5) * height;
-    }
-    
-    // メッシュグリッド生成
+    // メッシュグリッド生成（アンカー回転を考慮）
     const worldPositions = [], texCoords = [];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     
+    // アンカーポイントの位置（0-1の範囲）
+    const anchorPosX = anchorX;
+    const anchorPosY = anchorY;
+    
     for (let i = 0; i <= N; i++) {
         for (let j = 0; j <= M; j++) {
-            const xRatio = j / M;
-            const yRatio = i / N;
-            const x = centerX[i] + (xRatio - 0.5) * width;
-            const y = centerY[i];
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
-            worldPositions.push(x, y);
+            const xRatio = j / M;  // 0-1
+            const yRatio = i / N;  // 0-1
+            
+            // テクスチャ座標（そのまま）
             texCoords.push(xRatio, yRatio);
+            
+            // ピクセル座標（画像中心基準）
+            const pixelX = (xRatio - 0.5) * width;
+            const pixelY = (yRatio - 0.5) * height;
+            
+            // アンカーポイントからの相対位置（ピクセル）
+            const anchorPixelX = (anchorPosX - 0.5) * width;
+            const anchorPixelY = (anchorPosY - 0.5) * height;
+            const relX = pixelX - anchorPixelX;
+            const relY = pixelY - anchorPixelY;
+            
+            // アンカー回転の逆回転を適用して、揺れ計算用のローカル座標に変換
+            // これにより、回転後の座標系で「縦方向」が揺れの軸になる
+            const localX = relX * cosRot + relY * sinRot;
+            const localY = -relX * sinRot + relY * cosRot;
+            
+            // ローカル座標系でのY位置から揺れ強度を計算
+            // アンカーからの距離（ローカルY方向）で揺れ強度が決まる
+            const maxDist = Math.max(
+                Math.abs((0 - anchorPosY) * height),
+                Math.abs((1 - anchorPosY) * height)
+            );
+            
+            // 揺れ強度（アンカーから離れるほど強い）
+            let swayStrength = 0;
+            if (maxDist > 0) {
+                // localYが正（アンカーより下/先端側）なら揺れる
+                // localYが負（アンカーより上/根元側）なら揺れない（または弱い）
+                if (localY > 0) {
+                    swayStrength = smoothstep(0, 1, localY / maxDist);
+                } else {
+                    // 根元側は弱い揺れ
+                    swayStrength = smoothstep(0, 1, Math.abs(localY) / maxDist) * 0.3;
+                }
+            }
+            
+            // ピンの影響（ローカル座標系で計算）
+            let pinMultiplier = 1.0;
+            if (ws.pins && ws.pins.length > 0) {
+                const normalizedLocalY = (localY / height) + 0.5; // 0-1に正規化
+                let minMultiplier = 1.0;
+                for (const pin of ws.pins) {
+                    const pinPos = pin.position / 100;
+                    const distance = Math.abs(normalizedLocalY - pinPos);
+                    const range = pin.range / 100;
+                    if (distance < range) {
+                        const normalizedDist = distance / range;
+                        const multiplier = smootherstep(0, 1, normalizedDist);
+                        minMultiplier = Math.min(minMultiplier, multiplier);
+                    }
+                }
+                pinMultiplier = minMultiplier;
+            }
+            
+            // 位相（ローカルY位置に基づく）
+            const normalizedLocalY = (localY / height) + 0.5;
+            const phaseIndex = normalizedLocalY * N;
+            
+            // 揺れ角度の計算
+            const Si = (currentF * Math.sin(c * t - phaseIndex * d / N) + CNT) * swayStrength * pinMultiplier;
+            
+            // 揺れオフセット（ローカルX方向、つまりアンカーの横方向）
+            const swayOffset = Math.sin(Si) * Math.abs(localY);
+            
+            // ローカル座標系でのオフセット
+            const offsetLocalX = swayOffset;
+            const offsetLocalY = 0;
+            
+            // オフセットをワールド座標系に戻す（アンカー回転を適用）
+            const offsetWorldX = offsetLocalX * cosRot - offsetLocalY * sinRot;
+            const offsetWorldY = offsetLocalX * sinRot + offsetLocalY * cosRot;
+            
+            // 最終位置
+            const finalX = pixelX + offsetWorldX;
+            const finalY = pixelY + offsetWorldY;
+            
+            minX = Math.min(minX, finalX);
+            maxX = Math.max(maxX, finalX);
+            minY = Math.min(minY, finalY);
+            maxY = Math.max(maxY, finalY);
+            worldPositions.push(finalX, finalY);
         }
     }
     
@@ -496,13 +542,13 @@ function renderWindShakeWebGL(gl, img, mesh, canvasWidth, canvasHeight) {
 }
 
 // ===== 風揺れ適用 =====
-function applyWindShakeWebGL(layerCtx, img, width, height, localTime, windSwayParams, anchorX, anchorY) {
+function applyWindShakeWebGL(layerCtx, img, width, height, localTime, windSwayParams, anchorX, anchorY, anchorRotation = 0, animationStartTime = 0) {
     if (!windShakeCanvas) initWindShakeWebGL();
     const gl = windShakeGL;
     const canvas = windShakeCanvas;
     
     // メッシュを生成してバウンディングボックスを取得（アンカー座標とimgを渡す）
-    const meshData = createWindShakeMeshWithBounds(windSwayParams, width, height, localTime, anchorX, anchorY, img);
+    const meshData = createWindShakeMeshWithBounds(windSwayParams, width, height, localTime, anchorX, anchorY, img, anchorRotation, animationStartTime);
     
     // バウンディングボックスのサイズを計算（余裕を持たせる）
     const padding = 200;
@@ -534,11 +580,46 @@ function applyWindShakeWebGL(layerCtx, img, width, height, localTime, windSwayPa
 // ===== レイヤー描画 =====
 function drawLayerWithWindSway(layer, anchorX, anchorY, localTime) {
     if (layer.windSwayEnabled) {
-        // アンカーポイントを軸にして揺らす
-        applyWindShakeWebGL(ctx, layer.img, layer.width, layer.height, localTime, layer.windSwayParams, layer.anchorX, layer.anchorY);
+        // アンカー回転を取得
+        const anchorRotation = layer.anchorRotation || 0;
+        
+        // アニメーション開始時間を取得（減衰モード用）
+        let animationStartTime = 0;
+        if (layer.windSwayParams && layer.windSwayParams.loop === false) {
+            // 減衰モードの場合、キーフレームから開始時間を取得
+            animationStartTime = getWindSwayAnimationStartTime(layer, localTime);
+        }
+        
+        // アンカーポイントを軸にして揺らす（アンカー回転を適用）
+        applyWindShakeWebGL(ctx, layer.img, layer.width, layer.height, localTime, layer.windSwayParams, layer.anchorX, layer.anchorY, anchorRotation, animationStartTime);
     } else {
         ctx.drawImage(layer.img, anchorX, anchorY, layer.width, layer.height);
     }
+}
+
+// 風揺れのアニメーション開始時間を取得
+function getWindSwayAnimationStartTime(layer, localTime) {
+    if (!layer.windSwayKeyframes || layer.windSwayKeyframes.length === 0) {
+        return 0;
+    }
+    
+    const fps = typeof fpsRate !== 'undefined' ? fpsRate : 24;
+    const currentFrame = Math.floor(localTime * fps);
+    
+    // 現在のフレーム以前で最も近いキーフレームを探す
+    let activeKeyframe = null;
+    for (let i = layer.windSwayKeyframes.length - 1; i >= 0; i--) {
+        if (layer.windSwayKeyframes[i].frame <= currentFrame) {
+            activeKeyframe = layer.windSwayKeyframes[i];
+            break;
+        }
+    }
+    
+    if (activeKeyframe) {
+        return activeKeyframe.frame / fps;
+    }
+    
+    return 0;
 }
 
 // ===== ピン機能 =====

@@ -1,5 +1,5 @@
 /**
- * ⭐ Starlit Puppet Editor v1.12.0
+ * ⭐ Starlit Puppet Editor v1.12.1
  * レイヤーリスト・フォルダ機能
  * - チェックボックスによる複数選択（タブレット対応）
  * - ZIP/PSD一括読み込み
@@ -95,10 +95,17 @@ function updateLayerList() {
     
     // 揺れモーションレイヤー追加ボタン
     const bounceBtn = document.createElement('button');
-    bounceBtn.textContent = '🎈 揺れモーション追加';
+    bounceBtn.textContent = '🎈 弾みレイヤー追加';
     bounceBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #ffa500, #ff8c00); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
     bounceBtn.onclick = createBounceLayer;
     buttonContainer.appendChild(bounceBtn);
+    
+    // ジャンプフォルダー追加ボタン
+    const jumpFolderBtn = document.createElement('button');
+    jumpFolderBtn.textContent = '🦘 ジャンプフォルダー追加';
+    jumpFolderBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #32cd32, #228b22); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
+    jumpFolderBtn.onclick = createJumpFolder;
+    buttonContainer.appendChild(jumpFolderBtn);
     
     // パペットレイヤー追加ボタン
     const puppetBtn = document.createElement('button');
@@ -461,7 +468,7 @@ function renderLayerItem(layer, depth) {
     const childIndicator = hasChildren ? '📎' : '';
     
     // フォルダの場合
-    if (layer.type === 'folder') {
+    if (layer.type === 'folder' || layer.type === 'jumpFolder') {
         const expanded = layer.expanded !== false;
         const isChecked = selectedLayerIds.includes(layer.id) ? 'checked' : '';
         
@@ -477,6 +484,13 @@ function renderLayerItem(layer, depth) {
                 <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
             </div>
         `;
+        
+        // ジャンプフォルダーは緑系の背景、白文字
+        if (layer.type === 'jumpFolder') {
+            item.style.background = 'linear-gradient(135deg, #1a4d1a, #2d6a2d)';
+            item.style.borderColor = '#32cd32';
+            item.style.color = '#ffffff';
+        }
         
         item.addEventListener('click', (e) => {
             if (!e.target.classList.contains('folder-toggle') && e.target.type !== 'checkbox') {
@@ -553,6 +567,7 @@ function renderLayerItem(layer, depth) {
 function getLayerTypeIcon(type) {
     switch (type) {
         case 'folder': return '📁';
+        case 'jumpFolder': return '🦘';
         case 'lipsync': return '💬';
         case 'blink': return '👀';
         case 'sequence': return '🎞️';
@@ -694,7 +709,7 @@ function deleteLayer(layerId, event) {
 function toggleFolder(folderId, event) {
     event.stopPropagation();
     const folder = layers.find(l => l.id === folderId);
-    if (folder && folder.type === 'folder') {
+    if (folder && (folder.type === 'folder' || folder.type === 'jumpFolder')) {
         folder.expanded = !folder.expanded;
         updateLayerList();
     }
@@ -1222,8 +1237,8 @@ function handleDragOver(e, layerId) {
     const targetLayer = layers.find(l => l.id === layerId);
     
     if (draggedLayerId !== layerId) {
-        // ターゲットがフォルダの場合は特別なハイライト
-        if (targetLayer && targetLayer.type === 'folder') {
+        // ターゲットがフォルダまたはジャンプフォルダーの場合は特別なハイライト
+        if (targetLayer && (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder')) {
             targetElement.style.borderTop = '';
             targetElement.style.background = 'rgba(218, 165, 32, 0.3)';
             targetElement.style.outline = '2px solid var(--accent-gold)';
@@ -1259,10 +1274,10 @@ function handleDrop(e, targetLayerId) {
     
     if (!draggedLayer || !targetLayer) return false;
     
-    // ターゲットがフォルダの場合：フォルダ内に追加
-    if (targetLayer.type === 'folder') {
+    // ターゲットがフォルダまたはジャンプフォルダーの場合：フォルダ内に追加
+    if (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder') {
         // 循環参照チェック（ドラッグしたレイヤーがフォルダの場合）
-        if (draggedLayer.type === 'folder') {
+        if (draggedLayer.type === 'folder' || draggedLayer.type === 'jumpFolder') {
             // ターゲットフォルダがドラッグしたフォルダの子孫でないかチェック
             let checkParent = targetLayer;
             while (checkParent) {
@@ -1282,6 +1297,15 @@ function handleDrop(e, targetLayerId) {
             const dy = draggedLayer.y - targetLayer.y;
             draggedLayer.x = dx;
             draggedLayer.y = dy;
+            
+            // キーフレームの座標も相対座標に変換
+            if (draggedLayer.keyframes && draggedLayer.keyframes.length > 0) {
+                draggedLayer.keyframes.forEach(kf => {
+                    if (kf.x !== undefined) kf.x = kf.x - targetLayer.x;
+                    if (kf.y !== undefined) kf.y = kf.y - targetLayer.y;
+                });
+                console.log(`📐 キーフレーム座標を相対座標に変換しました`);
+            }
             
             // 親をフォルダに設定
             draggedLayer.parentLayerId = targetLayerId;
@@ -1346,7 +1370,7 @@ function createBounceLayer() {
                 const layer = {
                     id: nextLayerId++,
                     type: 'bounce',
-                    name: '揺れモーション',
+                    name: '弾みレイヤー',
                     img: img,
                     x: canvas.width / 2,
                     y: canvas.height / 2,
@@ -1466,4 +1490,56 @@ function moveLayerDown(layerId, event) {
     if (typeof saveHistory === 'function') {
         saveHistory();
     }
+}
+
+// ===== ジャンプフォルダー作成 =====
+function createJumpFolder() {
+    const folder = {
+        id: nextLayerId++,
+        type: 'jumpFolder',
+        name: 'ジャンプフォルダー',
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        rotation: 0,
+        scale: 1,
+        opacity: 1.0,
+        visible: true,
+        blendMode: 'source-over',
+        parentLayerId: null,
+        anchorOffsetX: 0,
+        anchorOffsetY: 0,
+        // ジャンプパラメータ
+        jumpParams: getDefaultJumpParams(),
+        keyframes: [{
+            frame: 0,
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            rotation: 0,
+            scale: 1,
+            opacity: 1.0
+        }]
+    };
+    
+    layers.push(folder);
+    updateLayerList();
+    selectLayer(folder.id, false);
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+    
+    console.log('🦘 ジャンプフォルダー作成:', folder.name);
+}
+
+// ===== ジャンプパラメータのデフォルト値 =====
+function getDefaultJumpParams() {
+    return {
+        amplitude: 50,      // ジャンプの高さ（ピクセル）
+        frequency: 3,       // 揺れる回数
+        dampingTime: 1.0,   // 減衰時間（秒）
+        loop: false,        // ループ再生
+        loopPeriod: 1.0,    // ループ周期（秒）
+        keyframes: []       // アニメーションキーフレーム { frame: number }
+    };
 }
