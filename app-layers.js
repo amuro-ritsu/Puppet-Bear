@@ -494,7 +494,7 @@ function renderLayerItem(layer, depth) {
         
         item.addEventListener('click', (e) => {
             if (!e.target.classList.contains('folder-toggle') && e.target.type !== 'checkbox') {
-                selectLayer(layer.id, e.shiftKey);
+                selectLayer(layer.id, e.shiftKey, e.ctrlKey || e.metaKey);
             }
         });
         layerList.appendChild(item);
@@ -529,7 +529,7 @@ function renderLayerItem(layer, depth) {
         item.style.borderColor = '#1db954';
         
         item.addEventListener('click', (e) => {
-            if (e.target.type !== 'checkbox') selectLayer(layer.id, e.shiftKey);
+            if (e.target.type !== 'checkbox') selectLayer(layer.id, e.shiftKey, e.ctrlKey || e.metaKey);
         });
         layerList.appendChild(item);
     }
@@ -551,7 +551,7 @@ function renderLayerItem(layer, depth) {
         `;
         
         item.addEventListener('click', (e) => {
-            if (e.target.type !== 'checkbox') selectLayer(layer.id, e.shiftKey);
+            if (e.target.type !== 'checkbox') selectLayer(layer.id, e.shiftKey, e.ctrlKey || e.metaKey);
         });
         layerList.appendChild(item);
         
@@ -597,20 +597,43 @@ function toggleLayerSelection(layerId, checked) {
 }
 
 // ===== レイヤー選択（render()を呼ばない） =====
-function selectLayer(layerId, shiftKey = false) {
-    if (shiftKey) {
-        // Shift+クリック：複数選択
+// 最後に選択したレイヤーのID（範囲選択用）
+let lastSelectedLayerId = null;
+
+function selectLayer(layerId, shiftKey = false, ctrlKey = false) {
+    if (shiftKey && lastSelectedLayerId !== null) {
+        // Shift+クリック：範囲選択
+        // レイヤーリストの表示順でインデックスを取得
+        const displayOrder = getDisplayOrderLayerIds();
+        const lastIndex = displayOrder.indexOf(lastSelectedLayerId);
+        const currentIndex = displayOrder.indexOf(layerId);
+        
+        if (lastIndex !== -1 && currentIndex !== -1) {
+            // 範囲内のすべてのレイヤーを選択
+            const startIndex = Math.min(lastIndex, currentIndex);
+            const endIndex = Math.max(lastIndex, currentIndex);
+            
+            // 既存の選択をクリアして範囲選択
+            selectedLayerIds = [];
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (!selectedLayerIds.includes(displayOrder[i])) {
+                    selectedLayerIds.push(displayOrder[i]);
+                }
+            }
+        }
+    } else if (ctrlKey) {
+        // Ctrl+クリック：トグル選択（追加/解除）
         const index = selectedLayerIds.indexOf(layerId);
         if (index > -1) {
-            // 既に選択されている場合は解除
             selectedLayerIds.splice(index, 1);
         } else {
-            // 選択に追加
             selectedLayerIds.push(layerId);
         }
+        lastSelectedLayerId = layerId;
     } else {
         // 通常クリック：単一選択
         selectedLayerIds = [layerId];
+        lastSelectedLayerId = layerId;
     }
     
     // レイヤー切り替え時に風揺れピン追加モードをオフにする
@@ -645,6 +668,28 @@ function selectLayer(layerId, shiftKey = false) {
     updateLayerList();
     updatePropertiesPanel();
     // render()は呼ばない - チカチカ防止
+}
+
+// レイヤーリストの表示順でIDを取得
+function getDisplayOrderLayerIds() {
+    const result = [];
+    
+    function addLayerAndChildren(layerId) {
+        const layer = layers.find(l => l.id === layerId);
+        if (!layer) return;
+        
+        result.push(layerId);
+        
+        // 子レイヤーを追加
+        const children = layers.filter(l => l.parentLayerId === layerId);
+        children.forEach(child => addLayerAndChildren(child.id));
+    }
+    
+    // ルートレイヤー（親がないもの）から開始
+    const rootLayers = layers.filter(l => !l.parentLayerId);
+    rootLayers.forEach(layer => addLayerAndChildren(layer.id));
+    
+    return result;
 }
 
 // ===== レイヤー表示切り替え =====
@@ -718,7 +763,7 @@ function toggleFolder(folderId, event) {
 // ===== フォルダ作成 =====
 function createFolderFromSelection() {
     if (selectedLayerIds.length === 0) {
-        alert('レイヤーを選択してください（Shift+クリックで複数選択）');
+        alert('レイヤーを選択してください（Shift+クリックで範囲選択、Ctrl+クリックで追加選択）');
         return;
     }
     

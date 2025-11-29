@@ -415,7 +415,7 @@ function updatePropertiesPanel() {
         const availableParents = layers.filter(l => {
             // 選択中のレイヤー自身は除外
             if (selectedLayerIds.includes(l.id)) return false;
-            // フォルダ・ジャンプフォルダ・音声は親になれない（フォルダは内部処理が違う）
+            // ジャンプフォルダ・音声は親になれない
             if (l.type === 'jumpFolder' || l.type === 'audio') return false;
             // 選択中レイヤーの子孫も除外（循環防止）
             for (const selId of selectedLayerIds) {
