@@ -22,10 +22,96 @@ function updateLayerList() {
     `;
     layerList.appendChild(header);
     
+    // ===== ボタン群（レイヤー一覧の上に配置） =====
+    const buttonContainer = document.createElement('div');
+    buttonContainer.id = 'layer-buttons-container';
+    buttonContainer.style.cssText = 'display: flex !important; flex-direction: column; gap: 6px; margin-bottom: 12px; padding: 8px; background: rgba(0,0,0,0.15); border-radius: 8px;';
+    
+    // フォルダ作成ボタン
+    const folderBtn = document.createElement('button');
+    folderBtn.textContent = '📁 フォルダ作成';
+    folderBtn.className = 'create-folder-btn';
+    folderBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, var(--biscuit-dark), var(--biscuit-medium)); color: var(--chocolate-dark); border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold;';
+    folderBtn.onclick = createFolderFromSelection;
+    buttonContainer.appendChild(folderBtn);
+    
+    // ジャンプフォルダー追加ボタン
+    const jumpFolderBtn = document.createElement('button');
+    jumpFolderBtn.textContent = '🦘 ジャンプフォルダー追加';
+    jumpFolderBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #32cd32, #228b22); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold;';
+    jumpFolderBtn.onclick = createJumpFolder;
+    buttonContainer.appendChild(jumpFolderBtn);
+    
+    // 区切り線
+    const separator = document.createElement('div');
+    separator.style.cssText = 'height: 1px; background: var(--border-color); margin: 4px 0;';
+    buttonContainer.appendChild(separator);
+    
+    // レイヤー追加（プルダウン + ボタン）
+    const addLayerRow = document.createElement('div');
+    addLayerRow.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+    
+    const layerTypeSelect = document.createElement('select');
+    layerTypeSelect.id = 'layer-type-select';
+    layerTypeSelect.style.cssText = 'flex: 1; padding: 8px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 2px solid var(--border-color); border-radius: 6px; font-weight: bold; cursor: pointer;';
+    layerTypeSelect.innerHTML = `
+        <option value="image">📷 画像/ZIP</option>
+        <option value="lipsync">💬 口パク</option>
+        <option value="blink">👀 まばたき</option>
+        <option value="sequence">🎞️ 連番アニメ</option>
+        <option value="crosssection">🔞 断面図</option>
+        <option value="bounce">🎈 弾みレイヤー</option>
+        <option value="puppet">🎭 パペット</option>
+        <option value="audio">🎵 音声</option>
+    `;
+    addLayerRow.appendChild(layerTypeSelect);
+    
+    const addLayerBtn = document.createElement('button');
+    addLayerBtn.textContent = '➕ 追加';
+    addLayerBtn.style.cssText = 'padding: 8px 16px; background: linear-gradient(135deg, var(--accent-gold), var(--accent-orange)); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; white-space: nowrap;';
+    addLayerBtn.onclick = () => {
+        const type = layerTypeSelect.value;
+        switch(type) {
+            case 'image':
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*,.zip,.psd';
+                input.multiple = true;
+                input.onchange = (e) => handleImageFilesInput(e.target.files);
+                input.click();
+                break;
+            case 'lipsync':
+                createLipSyncLayer();
+                break;
+            case 'blink':
+                createBlinkLayer();
+                break;
+            case 'sequence':
+                createSequenceLayer();
+                break;
+            case 'crosssection':
+                createCrossSectionLayer();
+                break;
+            case 'bounce':
+                createBounceLayer();
+                break;
+            case 'puppet':
+                createPuppetLayer();
+                break;
+            case 'audio':
+                createAudioLayer();
+                break;
+        }
+    };
+    addLayerRow.appendChild(addLayerBtn);
+    buttonContainer.appendChild(addLayerRow);
+    
+    layerList.appendChild(buttonContainer);
+    
     // 説明
     const info = document.createElement('div');
-    info.style.cssText = 'font-size: 11px; color: var(--biscuit); padding: 4px 8px; margin-bottom: 8px; background: var(--chocolate-dark); border-radius: 4px;';
-    info.innerHTML = '💡 上のレイヤーが前面に表示されます<br>☑️ チェックボックスで複数選択';
+    info.style.cssText = 'font-size: 10px; color: var(--biscuit); padding: 4px 8px; margin-bottom: 8px; background: var(--chocolate-dark); border-radius: 4px;';
+    info.innerHTML = '💡 上のレイヤーが前面 | Shift:範囲選択 | Ctrl:追加選択';
     layerList.appendChild(info);
     
     // ルートレベルのレイヤーを表示（逆順：上にあるほど上に表示）
@@ -34,94 +120,6 @@ function updateLayerList() {
     for (let i = rootLayers.length - 1; i >= 0; i--) {
         renderLayerItem(rootLayers[i], 0);
     }
-    
-    // レイヤー追加ボタン群
-    const buttonContainer = document.createElement('div');
-    buttonContainer.id = 'layer-buttons-container';
-    buttonContainer.style.cssText = 'display: flex !important; flex-direction: column; gap: 8px; margin-top: 8px; visibility: visible !important;';
-    
-    // フォルダ作成ボタン
-    const folderBtn = document.createElement('button');
-    folderBtn.textContent = '📁 フォルダ作成';
-    folderBtn.className = 'create-folder-btn';
-    folderBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, var(--biscuit-dark), var(--biscuit-medium)); color: var(--chocolate-dark); border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    folderBtn.onclick = createFolderFromSelection;
-    buttonContainer.appendChild(folderBtn);
-    
-    // 画像追加ボタン（ZIP/PSD対応）
-    const imageBtn = document.createElement('button');
-    imageBtn.id = 'add-image-btn';
-    imageBtn.textContent = '📷 画像/ZIP追加';
-    imageBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, var(--biscuit-dark), var(--biscuit-medium)); color: var(--chocolate-dark); border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    imageBtn.onclick = () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*,.zip,.psd';
-        input.multiple = true;
-        input.onchange = (e) => {
-            handleImageFilesInput(e.target.files);
-        };
-        input.click();
-    };
-    buttonContainer.appendChild(imageBtn);
-    
-    // 口パクレイヤー追加ボタン
-    const lipSyncBtn = document.createElement('button');
-    lipSyncBtn.textContent = '💬 口パク追加';
-    lipSyncBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #ff69b4, #ff1493); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    lipSyncBtn.onclick = createLipSyncLayer;
-    buttonContainer.appendChild(lipSyncBtn);
-    
-    // まばたきレイヤー追加ボタン
-    const blinkBtn = document.createElement('button');
-    blinkBtn.textContent = '👀 まばたき追加';
-    blinkBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #87ceeb, #4682b4); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    blinkBtn.onclick = createBlinkLayer;
-    buttonContainer.appendChild(blinkBtn);
-    
-    // 連番アニメレイヤー追加ボタン
-    const sequenceBtn = document.createElement('button');
-    sequenceBtn.textContent = '🎞️ 連番アニメ追加';
-    sequenceBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #20b2aa, #008080); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    sequenceBtn.onclick = createSequenceLayer;
-    buttonContainer.appendChild(sequenceBtn);
-    
-    // 断面図レイヤー追加ボタン
-    const crossSectionBtn = document.createElement('button');
-    crossSectionBtn.textContent = '🔞 断面図追加';
-    crossSectionBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #e91e63, #c2185b); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    crossSectionBtn.onclick = createCrossSectionLayer;
-    buttonContainer.appendChild(crossSectionBtn);
-    
-    // 揺れモーションレイヤー追加ボタン
-    const bounceBtn = document.createElement('button');
-    bounceBtn.textContent = '🎈 弾みレイヤー追加';
-    bounceBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #ffa500, #ff8c00); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    bounceBtn.onclick = createBounceLayer;
-    buttonContainer.appendChild(bounceBtn);
-    
-    // ジャンプフォルダー追加ボタン
-    const jumpFolderBtn = document.createElement('button');
-    jumpFolderBtn.textContent = '🦘 ジャンプフォルダー追加';
-    jumpFolderBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #32cd32, #228b22); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    jumpFolderBtn.onclick = createJumpFolder;
-    buttonContainer.appendChild(jumpFolderBtn);
-    
-    // パペットレイヤー追加ボタン
-    const puppetBtn = document.createElement('button');
-    puppetBtn.textContent = '🎭 パペット追加';
-    puppetBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #9370db, #8a2be2); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    puppetBtn.onclick = createPuppetLayer;
-    buttonContainer.appendChild(puppetBtn);
-    
-    // 音声レイヤー追加ボタン
-    const audioBtn = document.createElement('button');
-    audioBtn.textContent = '🎵 音声追加';
-    audioBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #1db954, #1ed760); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold; display: block !important; visibility: visible !important;';
-    audioBtn.onclick = createAudioLayer;
-    buttonContainer.appendChild(audioBtn);
-    
-    layerList.appendChild(buttonContainer);
     
     // タイムラインを更新
     if (typeof updateTimeline === 'function') {
