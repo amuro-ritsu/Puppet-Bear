@@ -1482,22 +1482,49 @@ function moveLayerUp(layerId, event) {
     const siblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
     const currentIndex = siblings.indexOf(layer);
     
-    // 既に最上位の場合は何もしない
-    if (currentIndex >= siblings.length - 1) return;
-    
-    // 配列内での位置を変更
-    const globalIndex = layers.indexOf(layer);
-    const targetLayer = siblings[currentIndex + 1];
-    const targetGlobalIndex = layers.indexOf(targetLayer);
-    
-    // 入れ替え
-    layers.splice(globalIndex, 1);
-    layers.splice(targetGlobalIndex, 0, layer);
+    // 既に兄弟内で最上位の場合
+    if (currentIndex >= siblings.length - 1) {
+        // 親がある場合は親の上に移動（親と同じ階層に）
+        if (layer.parentLayerId) {
+            const parent = layers.find(l => l.id === layer.parentLayerId);
+            if (parent) {
+                // 親の親を自分の親にする（親の外に出る）
+                layer.parentLayerId = parent.parentLayerId;
+                
+                // 配列内で親の直後に移動
+                const layerGlobalIndex = layers.indexOf(layer);
+                const parentGlobalIndex = layers.indexOf(parent);
+                layers.splice(layerGlobalIndex, 1);
+                layers.splice(parentGlobalIndex + 1, 0, layer);
+            }
+        }
+    } else {
+        // 上のレイヤーがフォルダの場合、そのフォルダの中に入る
+        const targetLayer = siblings[currentIndex + 1];
+        if (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder') {
+            // フォルダの中に入る（最下位に）
+            layer.parentLayerId = targetLayer.id;
+            
+            // 配列内での位置も調整
+            const layerGlobalIndex = layers.indexOf(layer);
+            const targetGlobalIndex = layers.indexOf(targetLayer);
+            layers.splice(layerGlobalIndex, 1);
+            // フォルダの直前に配置（子として最下位）
+            const adjustedTargetIndex = layerGlobalIndex < targetGlobalIndex ? targetGlobalIndex - 1 : targetGlobalIndex;
+            layers.splice(adjustedTargetIndex, 0, layer);
+        } else {
+            // 通常の入れ替え
+            const globalIndex = layers.indexOf(layer);
+            const targetGlobalIndex = layers.indexOf(targetLayer);
+            
+            layers.splice(globalIndex, 1);
+            layers.splice(targetGlobalIndex, 0, layer);
+        }
+    }
     
     updateLayerList();
     render();
     
-    // 履歴を保存
     if (typeof saveHistory === 'function') {
         saveHistory();
     }
@@ -1514,22 +1541,49 @@ function moveLayerDown(layerId, event) {
     const siblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
     const currentIndex = siblings.indexOf(layer);
     
-    // 既に最下位の場合は何もしない
-    if (currentIndex <= 0) return;
-    
-    // 配列内での位置を変更
-    const globalIndex = layers.indexOf(layer);
-    const targetLayer = siblings[currentIndex - 1];
-    const targetGlobalIndex = layers.indexOf(targetLayer);
-    
-    // 入れ替え
-    layers.splice(globalIndex, 1);
-    layers.splice(targetGlobalIndex, 0, layer);
+    // 既に兄弟内で最下位の場合
+    if (currentIndex <= 0) {
+        // 親がある場合は親の下に移動（親と同じ階層に）
+        if (layer.parentLayerId) {
+            const parent = layers.find(l => l.id === layer.parentLayerId);
+            if (parent) {
+                // 親の親を自分の親にする（親の外に出る）
+                layer.parentLayerId = parent.parentLayerId;
+                
+                // 配列内で親の直前に移動
+                const layerGlobalIndex = layers.indexOf(layer);
+                const parentGlobalIndex = layers.indexOf(parent);
+                layers.splice(layerGlobalIndex, 1);
+                // 削除後のインデックスを調整
+                const adjustedParentIndex = layerGlobalIndex < parentGlobalIndex ? parentGlobalIndex - 1 : parentGlobalIndex;
+                layers.splice(adjustedParentIndex, 0, layer);
+            }
+        }
+    } else {
+        // 下のレイヤーがフォルダの場合、そのフォルダの中に入る
+        const targetLayer = siblings[currentIndex - 1];
+        if (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder') {
+            // フォルダの中に入る
+            layer.parentLayerId = targetLayer.id;
+            
+            // 配列内での位置も調整（フォルダの直後に移動）
+            const layerGlobalIndex = layers.indexOf(layer);
+            const targetGlobalIndex = layers.indexOf(targetLayer);
+            layers.splice(layerGlobalIndex, 1);
+            layers.splice(targetGlobalIndex, 0, layer);
+        } else {
+            // 通常の入れ替え
+            const globalIndex = layers.indexOf(layer);
+            const targetGlobalIndex = layers.indexOf(targetLayer);
+            
+            layers.splice(globalIndex, 1);
+            layers.splice(targetGlobalIndex, 0, layer);
+        }
+    }
     
     updateLayerList();
     render();
     
-    // 履歴を保存
     if (typeof saveHistory === 'function') {
         saveHistory();
     }
