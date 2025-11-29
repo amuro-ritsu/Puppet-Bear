@@ -404,7 +404,13 @@ function renderKeyframe(layer, kfIndex, y, property = null) {
         keyframeEl.classList.add('selected');
     }
     
-    const framePos = kf.frame * timelinePixelsPerFrame;
+    // ドラッグ中のプレビュー位置を使用
+    let frameToShow = kf.frame;
+    if (kf._previewFrame !== undefined && kf._previewProperty === property) {
+        frameToShow = kf._previewFrame;
+    }
+    
+    const framePos = frameToShow * timelinePixelsPerFrame;
     keyframeEl.style.left = framePos + 'px';
     keyframeEl.style.top = y + 'px';
     keyframeEl.style.zIndex = '10';
@@ -842,10 +848,27 @@ function handleKeyframeDrag(e) {
     const newFrame = Math.max(0, keyframeDragStart.frame + deltaFrames);
     
     const layer = layers.find(l => l.id === selectedKeyframe.layerId);
-    if (layer && layer.keyframes && layer.keyframes[selectedKeyframe.index]) {
-        layer.keyframes[selectedKeyframe.index].frame = newFrame;
-        updateTimeline();
+    if (!layer || !layer.keyframes) return;
+    
+    const kf = layer.keyframes[selectedKeyframe.index];
+    if (!kf) return;
+    
+    // プロパティが指定されている場合は個別移動
+    if (selectedKeyframe.property) {
+        // プレビュー用に一時的にフレームを更新（実際の分離はドラッグ終了時）
+        if (!selectedKeyframe.originalFrame) {
+            selectedKeyframe.originalFrame = kf.frame;
+        }
+        selectedKeyframe.newFrame = newFrame;
+        // UIプレビュー用
+        kf._previewFrame = newFrame;
+        kf._previewProperty = selectedKeyframe.property;
+    } else {
+        // プロパティ未指定の場合は全体を移動（従来の動作）
+        kf.frame = newFrame;
     }
+    
+    updateTimeline();
 }
 
 // ===== キーフレームドラッグ終了 =====
@@ -857,8 +880,54 @@ function handleKeyframeDragEnd(e) {
     }
     
     // キーフレームドラッグ終了
-    if (isDraggingKeyframe) {
+    if (isDraggingKeyframe && selectedKeyframe) {
+        const layer = layers.find(l => l.id === selectedKeyframe.layerId);
+        
+        if (layer && layer.keyframes && selectedKeyframe.property && selectedKeyframe.newFrame !== undefined) {
+            const kf = layer.keyframes[selectedKeyframe.index];
+            if (kf) {
+                // プレビュー用の一時データをクリア
+                delete kf._previewFrame;
+                delete kf._previewProperty;
+                
+                const prop = selectedKeyframe.property;
+                const originalFrame = selectedKeyframe.originalFrame;
+                const newFrame = selectedKeyframe.newFrame;
+                
+                // フレームが変わった場合のみ処理
+                if (originalFrame !== newFrame && kf[prop] !== undefined) {
+                    const propValue = kf[prop];
+                    
+                    // 元のキーフレームからプロパティを削除
+                    delete kf[prop];
+                    
+                    // 元のキーフレームに他のプロパティが残っているか確認
+                    const remainingProps = ['x', 'y', 'rotation', 'scale', 'opacity'].filter(p => kf[p] !== undefined);
+                    if (remainingProps.length === 0) {
+                        // プロパティがなくなったらキーフレーム自体を削除
+                        layer.keyframes.splice(selectedKeyframe.index, 1);
+                    }
+                    
+                    // 新しいフレームに既存のキーフレームがあるか確認
+                    let targetKf = layer.keyframes.find(k => k.frame === newFrame);
+                    if (targetKf) {
+                        // 既存のキーフレームにプロパティを追加
+                        targetKf[prop] = propValue;
+                    } else {
+                        // 新しいキーフレームを作成
+                        const newKf = { frame: newFrame };
+                        newKf[prop] = propValue;
+                        layer.keyframes.push(newKf);
+                    }
+                    
+                    // フレーム順にソート
+                    layer.keyframes.sort((a, b) => a.frame - b.frame);
+                }
+            }
+        }
+        
         isDraggingKeyframe = false;
+        selectedKeyframe = null;
         updateTimeline();
         render();
     }
@@ -971,10 +1040,24 @@ function handleKeyframeTouchMove(e) {
     const newFrame = Math.max(0, keyframeDragStart.frame + deltaFrames);
     
     const layer = layers.find(l => l.id === selectedKeyframe.layerId);
-    if (layer && layer.keyframes && layer.keyframes[selectedKeyframe.index]) {
-        layer.keyframes[selectedKeyframe.index].frame = newFrame;
-        updateTimeline();
+    if (!layer || !layer.keyframes) return;
+    
+    const kf = layer.keyframes[selectedKeyframe.index];
+    if (!kf) return;
+    
+    // プロパティが指定されている場合は個別移動
+    if (selectedKeyframe.property) {
+        if (!selectedKeyframe.originalFrame) {
+            selectedKeyframe.originalFrame = kf.frame;
+        }
+        selectedKeyframe.newFrame = newFrame;
+        kf._previewFrame = newFrame;
+        kf._previewProperty = selectedKeyframe.property;
+    } else {
+        kf.frame = newFrame;
     }
+    
+    updateTimeline();
 }
 
 // ===== キーフレームタッチエンド =====
@@ -986,8 +1069,44 @@ function handleKeyframeTouchEnd(e) {
     }
     
     // キーフレームドラッグ終了
-    if (isDraggingKeyframe) {
+    if (isDraggingKeyframe && selectedKeyframe) {
+        const layer = layers.find(l => l.id === selectedKeyframe.layerId);
+        
+        if (layer && layer.keyframes && selectedKeyframe.property && selectedKeyframe.newFrame !== undefined) {
+            const kf = layer.keyframes[selectedKeyframe.index];
+            if (kf) {
+                delete kf._previewFrame;
+                delete kf._previewProperty;
+                
+                const prop = selectedKeyframe.property;
+                const originalFrame = selectedKeyframe.originalFrame;
+                const newFrame = selectedKeyframe.newFrame;
+                
+                if (originalFrame !== newFrame && kf[prop] !== undefined) {
+                    const propValue = kf[prop];
+                    delete kf[prop];
+                    
+                    const remainingProps = ['x', 'y', 'rotation', 'scale', 'opacity'].filter(p => kf[p] !== undefined);
+                    if (remainingProps.length === 0) {
+                        layer.keyframes.splice(selectedKeyframe.index, 1);
+                    }
+                    
+                    let targetKf = layer.keyframes.find(k => k.frame === newFrame);
+                    if (targetKf) {
+                        targetKf[prop] = propValue;
+                    } else {
+                        const newKf = { frame: newFrame };
+                        newKf[prop] = propValue;
+                        layer.keyframes.push(newKf);
+                    }
+                    
+                    layer.keyframes.sort((a, b) => a.frame - b.frame);
+                }
+            }
+        }
+        
         isDraggingKeyframe = false;
+        selectedKeyframe = null;
         updateTimeline();
         render();
     }
@@ -1004,13 +1123,32 @@ function handleKeyframeDelete(e) {
     }
     
     const layer = layers.find(l => l.id === selectedKeyframe.layerId);
-    if (layer && layer.keyframes && layer.keyframes[selectedKeyframe.index]) {
+    if (!layer || !layer.keyframes || !layer.keyframes[selectedKeyframe.index]) return;
+    
+    const kf = layer.keyframes[selectedKeyframe.index];
+    
+    // プロパティが指定されている場合は個別削除
+    if (selectedKeyframe.property) {
+        const prop = selectedKeyframe.property;
+        if (kf[prop] !== undefined) {
+            delete kf[prop];
+            
+            // 他のプロパティが残っているか確認
+            const remainingProps = ['x', 'y', 'rotation', 'scale', 'opacity'].filter(p => kf[p] !== undefined);
+            if (remainingProps.length === 0) {
+                // プロパティがなくなったらキーフレーム自体を削除
+                layer.keyframes.splice(selectedKeyframe.index, 1);
+            }
+        }
+    } else {
+        // プロパティ未指定の場合はキーフレーム全体を削除
         layer.keyframes.splice(selectedKeyframe.index, 1);
-        selectedKeyframe = null;
-        updateTimeline();
-        updatePropertiesPanel();
-        render();
     }
+    
+    selectedKeyframe = null;
+    updateTimeline();
+    updatePropertiesPanel();
+    render();
 }
 
 // ===== トランスフォーム変更時にキーフレーム自動挿入 =====
@@ -1063,76 +1201,56 @@ function applyKeyframeInterpolation() {
         
         if (!layer.keyframes || layer.keyframes.length === 0) return;
         
-        // キーフレームが1つだけの場合
-        if (layer.keyframes.length === 1) {
-            const kf = layer.keyframes[0];
-            if (kf.x !== undefined) layer.x = kf.x;
-            if (kf.y !== undefined) layer.y = kf.y;
-            if (kf.rotation !== undefined) layer.rotation = kf.rotation;
-            if (kf.scale !== undefined) layer.scale = kf.scale;
-            if (kf.opacity !== undefined) layer.opacity = kf.opacity;
-            return;
-        }
+        // 各プロパティごとに補間を行う
+        const properties = ['x', 'y', 'rotation', 'scale', 'opacity'];
         
-        // 現在のフレームに対応するキーフレームを探す
-        let prevKeyframe = null;
-        let nextKeyframe = null;
-        
-        for (let i = 0; i < layer.keyframes.length; i++) {
-            const kf = layer.keyframes[i];
+        properties.forEach(prop => {
+            // このプロパティを持つキーフレームを抽出
+            const propKeyframes = layer.keyframes
+                .filter(kf => kf[prop] !== undefined)
+                .sort((a, b) => a.frame - b.frame);
             
-            if (kf.frame === currentFrame) {
-                // 完全一致
-                if (kf.x !== undefined) layer.x = kf.x;
-                if (kf.y !== undefined) layer.y = kf.y;
-                if (kf.rotation !== undefined) layer.rotation = kf.rotation;
-                if (kf.scale !== undefined) layer.scale = kf.scale;
-                if (kf.opacity !== undefined) layer.opacity = kf.opacity;
+            if (propKeyframes.length === 0) return;
+            
+            // キーフレームが1つだけの場合
+            if (propKeyframes.length === 1) {
+                layer[prop] = propKeyframes[0][prop];
                 return;
-            } else if (kf.frame < currentFrame) {
-                prevKeyframe = kf;
-            } else if (kf.frame > currentFrame && !nextKeyframe) {
-                nextKeyframe = kf;
-                break;
             }
-        }
-        
-        // 2つのキーフレーム間で補間
-        if (prevKeyframe && nextKeyframe) {
-            const t = (currentFrame - prevKeyframe.frame) / (nextKeyframe.frame - prevKeyframe.frame);
             
-            if (prevKeyframe.x !== undefined && nextKeyframe.x !== undefined) {
-                layer.x = prevKeyframe.x + (nextKeyframe.x - prevKeyframe.x) * t;
+            // 現在のフレームに対応するキーフレームを探す
+            let prevKf = null;
+            let nextKf = null;
+            
+            for (let i = 0; i < propKeyframes.length; i++) {
+                const kf = propKeyframes[i];
+                
+                if (kf.frame === currentFrame) {
+                    // 完全一致
+                    layer[prop] = kf[prop];
+                    return;
+                } else if (kf.frame < currentFrame) {
+                    prevKf = kf;
+                } else if (kf.frame > currentFrame && !nextKf) {
+                    nextKf = kf;
+                    break;
+                }
             }
-            if (prevKeyframe.y !== undefined && nextKeyframe.y !== undefined) {
-                layer.y = prevKeyframe.y + (nextKeyframe.y - prevKeyframe.y) * t;
+            
+            // 2つのキーフレーム間で補間
+            if (prevKf && nextKf) {
+                const t = (currentFrame - prevKf.frame) / (nextKf.frame - prevKf.frame);
+                layer[prop] = prevKf[prop] + (nextKf[prop] - prevKf[prop]) * t;
             }
-            if (prevKeyframe.rotation !== undefined && nextKeyframe.rotation !== undefined) {
-                layer.rotation = prevKeyframe.rotation + (nextKeyframe.rotation - prevKeyframe.rotation) * t;
+            // prevKfのみ（最後のキーフレームより後）
+            else if (prevKf && !nextKf) {
+                layer[prop] = prevKf[prop];
             }
-            if (prevKeyframe.scale !== undefined && nextKeyframe.scale !== undefined) {
-                layer.scale = prevKeyframe.scale + (nextKeyframe.scale - prevKeyframe.scale) * t;
+            // nextKfのみ（最初のキーフレームより前）
+            else if (!prevKf && nextKf) {
+                layer[prop] = nextKf[prop];
             }
-            if (prevKeyframe.opacity !== undefined && nextKeyframe.opacity !== undefined) {
-                layer.opacity = prevKeyframe.opacity + (nextKeyframe.opacity - prevKeyframe.opacity) * t;
-            }
-        }
-        // prevKeyframeのみ（最後のキーフレームより後）
-        else if (prevKeyframe && !nextKeyframe) {
-            if (prevKeyframe.x !== undefined) layer.x = prevKeyframe.x;
-            if (prevKeyframe.y !== undefined) layer.y = prevKeyframe.y;
-            if (prevKeyframe.rotation !== undefined) layer.rotation = prevKeyframe.rotation;
-            if (prevKeyframe.scale !== undefined) layer.scale = prevKeyframe.scale;
-            if (prevKeyframe.opacity !== undefined) layer.opacity = prevKeyframe.opacity;
-        }
-        // nextKeyframeのみ（最初のキーフレームより前）
-        else if (!prevKeyframe && nextKeyframe) {
-            if (nextKeyframe.x !== undefined) layer.x = nextKeyframe.x;
-            if (nextKeyframe.y !== undefined) layer.y = nextKeyframe.y;
-            if (nextKeyframe.rotation !== undefined) layer.rotation = nextKeyframe.rotation;
-            if (nextKeyframe.scale !== undefined) layer.scale = nextKeyframe.scale;
-            if (nextKeyframe.opacity !== undefined) layer.opacity = nextKeyframe.opacity;
-        }
+        });
     });
 }
 
