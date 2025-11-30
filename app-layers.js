@@ -7,6 +7,69 @@
  * - フォルダ同士の親子関係表示対応
  */
 
+// ===== レイヤー絞り込み =====
+let layerFilterText = '';
+let layerFilterType = '';
+
+// 絞り込み条件に一致するかチェック（子孫も含めて再帰的にチェック）
+function layerMatchesFilter(layer) {
+    // 名前フィルター
+    const nameMatch = !layerFilterText || layer.name.toLowerCase().includes(layerFilterText.toLowerCase());
+    
+    // 種類フィルター
+    const typeMatch = !layerFilterType || layer.type === layerFilterType;
+    
+    // 自分が一致するか
+    if (nameMatch && typeMatch) return true;
+    
+    // フォルダの場合、子が一致すれば表示
+    if (layer.type === 'folder') {
+        const children = layers.filter(l => l.parentLayerId === layer.id);
+        for (const child of children) {
+            if (layerMatchesFilter(child)) return true;
+        }
+    }
+    
+    return false;
+}
+
+// 絞り込み適用（種類選択時）
+function applyLayerFilterType() {
+    const typeSelect = document.getElementById('layer-filter-type');
+    layerFilterType = typeSelect ? typeSelect.value : '';
+    updateLayerList();
+}
+
+// 絞り込み適用（テキスト検索 - Enterキーまたはボタンで）
+function applyLayerFilterText() {
+    const textInput = document.getElementById('layer-filter-text');
+    layerFilterText = textInput ? textInput.value : '';
+    updateLayerList();
+    
+    // フォーカスを戻す
+    setTimeout(() => {
+        const newInput = document.getElementById('layer-filter-text');
+        if (newInput) {
+            newInput.focus();
+            newInput.setSelectionRange(newInput.value.length, newInput.value.length);
+        }
+    }, 10);
+}
+
+// Enterキーで検索
+function handleFilterKeydown(e) {
+    if (e.key === 'Enter') {
+        applyLayerFilterText();
+    }
+}
+
+// 絞り込み解除
+function clearLayerFilter() {
+    layerFilterText = '';
+    layerFilterType = '';
+    updateLayerList();
+}
+
 // ===== レイヤーリスト更新 =====
 function updateLayerList() {
     layerList.innerHTML = '';
@@ -25,6 +88,59 @@ function updateLayerList() {
         <button onclick="showRenameDialog()" style="padding: 4px 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">✏️ リネーム</button>
     `;
     fixedContainer.appendChild(header);
+    
+    // ===== 絞り込み検索 =====
+    const filterContainer = document.createElement('div');
+    filterContainer.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;';
+    
+    // 名前検索
+    const filterRow1 = document.createElement('div');
+    filterRow1.style.cssText = 'display: flex; gap: 4px; align-items: center;';
+    filterRow1.innerHTML = `
+        <span style="font-size: 11px; color: var(--biscuit);">🔍</span>
+        <input type="text" id="layer-filter-text" placeholder="検索してEnter..." 
+            value="${layerFilterText}"
+            style="flex: 1; padding: 6px 8px; background: var(--chocolate-medium); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px;"
+            onkeydown="handleFilterKeydown(event)">
+        <button onclick="applyLayerFilterText()" 
+            style="padding: 6px 8px; background: var(--accent-gold); color: var(--chocolate-dark); border: none; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold;"
+            title="検索">🔍</button>
+    `;
+    filterContainer.appendChild(filterRow1);
+    
+    // 種類フィルター + クリアボタン
+    const filterRow2 = document.createElement('div');
+    filterRow2.style.cssText = 'display: flex; gap: 4px; align-items: center;';
+    filterRow2.innerHTML = `
+        <select id="layer-filter-type" 
+            style="flex: 1; padding: 6px; background: var(--chocolate-medium); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; cursor: pointer;"
+            onchange="applyLayerFilterType()">
+            <option value="">📋 すべての種類</option>
+            <option value="image" ${layerFilterType === 'image' ? 'selected' : ''}>🖼️ 画像</option>
+            <option value="folder" ${layerFilterType === 'folder' ? 'selected' : ''}>📁 フォルダ</option>
+            <option value="lipsync" ${layerFilterType === 'lipsync' ? 'selected' : ''}>💬 口パク</option>
+            <option value="blink" ${layerFilterType === 'blink' ? 'selected' : ''}>👀 まばたき</option>
+            <option value="sequence" ${layerFilterType === 'sequence' ? 'selected' : ''}>🎞️ 連番アニメ</option>
+            <option value="bounce" ${layerFilterType === 'bounce' ? 'selected' : ''}>🎈 弾みレイヤー</option>
+            <option value="puppet" ${layerFilterType === 'puppet' ? 'selected' : ''}>🎭 パペット</option>
+            <option value="audio" ${layerFilterType === 'audio' ? 'selected' : ''}>🎵 音声</option>
+        </select>
+        <button onclick="clearLayerFilter()" 
+            style="padding: 6px 10px; background: var(--chocolate-light); color: var(--text-light); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 10px; white-space: nowrap;"
+            title="絞り込み解除">✖ 解除</button>
+    `;
+    filterContainer.appendChild(filterRow2);
+    
+    // フィルター中の表示
+    if (layerFilterText || layerFilterType) {
+        const filterStatus = document.createElement('div');
+        filterStatus.style.cssText = 'font-size: 10px; color: var(--accent-gold); padding: 4px; text-align: center;';
+        const matchCount = layers.filter(l => layerMatchesFilter(l) && !l.parentLayerId).length;
+        filterStatus.textContent = `🔎 絞り込み中: ${matchCount}件表示`;
+        filterContainer.appendChild(filterStatus);
+    }
+    
+    fixedContainer.appendChild(filterContainer);
     
     // ===== ボタン群（レイヤー一覧の上に配置） =====
     const buttonContainer = document.createElement('div');
@@ -115,9 +231,13 @@ function updateLayerList() {
     
     // ルートレベルのレイヤーを表示（逆順：上にあるほど上に表示）
     const rootLayers = layers.filter(l => !l.parentLayerId);
-    // 逆順で表示
+    // 逆順で表示（フィルターを適用）
     for (let i = rootLayers.length - 1; i >= 0; i--) {
-        renderLayerItem(rootLayers[i], 0);
+        const layer = rootLayers[i];
+        // フィルターに一致するか、子が一致する場合のみ表示
+        if (layerMatchesFilter(layer)) {
+            renderLayerItem(layer, 0);
+        }
     }
     
     // タイムラインを更新
@@ -502,7 +622,10 @@ function renderLayerItem(layer, depth) {
         if (expanded) {
             const children = layers.filter(l => l.parentLayerId === layer.id);
             for (let i = children.length - 1; i >= 0; i--) {
-                renderLayerItem(children[i], depth + 1);
+                // フィルターに一致する子のみ表示
+                if (layerMatchesFilter(children[i])) {
+                    renderLayerItem(children[i], depth + 1);
+                }
             }
         }
     }
@@ -554,10 +677,12 @@ function renderLayerItem(layer, depth) {
         });
         layerList.appendChild(item);
         
-        // 子レイヤーを表示
+        // 子レイヤーを表示（フィルターを適用）
         const children = layers.filter(l => l.parentLayerId === layer.id);
         for (let i = children.length - 1; i >= 0; i--) {
-            renderLayerItem(children[i], depth + 1);
+            if (layerMatchesFilter(children[i])) {
+                renderLayerItem(children[i], depth + 1);
+            }
         }
     }
 }

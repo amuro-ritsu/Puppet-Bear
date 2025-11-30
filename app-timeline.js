@@ -4,6 +4,7 @@
  * - 音声レイヤー対応追加
  * - 書き出し範囲マーカー対応
  * - タイムラインズーム機能
+ * - キーフレームコピー＆ペースト機能
  */
 
 // ===== タイムライングローバル変数 =====
@@ -16,6 +17,10 @@ let seekbarImage = null; // シークバークマ画像
 let isSeekbarDragging = false; // シークバードラッグ中フラグ
 let seekbarRenderScheduled = false; // シークバー描画スケジュール済みフラグ
 let pendingSeekbarTime = 0; // 保留中のシークバー時間
+
+// ===== キーフレームコピー用 =====
+let copiedKeyframe = null; // コピーしたキーフレームデータ
+let selectedKeyframes = []; // 複数選択されたキーフレーム
 
 // ===== タイムラインズーム =====
 let timelinePixelsPerFrame = 20; // 1フレームあたりのピクセル数（デフォルト20px）
@@ -70,6 +75,20 @@ function initTimeline() {
     // タイムラインマウスダウンイベント（シークバードラッグ用）
     timelineContent.addEventListener('mousedown', handleTimelineMouseDown);
     timelineContent.addEventListener('touchstart', handleTimelineTouchStartInternal, { passive: false });
+    
+    // タイムライン背景の右クリックメニュー（ペースト用）
+    timelineContent.addEventListener('contextmenu', (e) => {
+        // キーフレーム上での右クリックは別処理
+        if (e.target.classList.contains('keyframe')) return;
+        
+        e.preventDefault();
+        const rect = timelineContent.getBoundingClientRect();
+        const scrollLeft = timelineContent.parentElement.scrollLeft || 0;
+        const x = e.clientX - rect.left + scrollLeft;
+        const clickedFrame = Math.round(x / timelinePixelsPerFrame);
+        
+        showTimelineContextMenu(e.clientX, e.clientY, clickedFrame);
+    });
     
     // キーフレームドラッグイベント
     document.addEventListener('mousemove', handleKeyframeDrag);
@@ -191,6 +210,9 @@ function renderTimelineLayer(layer, y, depth) {
     if (layer.type === 'puppet') icon = '🎭';
     if (layer.type === 'audio') icon = '🎵';
     
+    // ループアイコン
+    const loopIcon = layer.keyframeLoop ? '🔁' : '';
+    
     // レイヤーが展開されているか
     const isExpanded = expandedLayers[layer.id] || false;
     
@@ -212,7 +234,7 @@ function renderTimelineLayer(layer, y, depth) {
     iconSpan.textContent = icon;
     
     const nameSpan = document.createElement('span');
-    nameSpan.textContent = layer.name;
+    nameSpan.textContent = loopIcon + layer.name;
     
     layerItem.appendChild(toggle);
     layerItem.appendChild(iconSpan);
@@ -402,7 +424,13 @@ function renderKeyframe(layer, kfIndex, y, property = null) {
         keyframeEl.classList.add('blink');
     }
     
-    if (selectedKeyframe && selectedKeyframe.layerId === layer.id && selectedKeyframe.index === kfIndex && selectedKeyframe.property === property) {
+    // 複数選択対応（propertyも含めて判定）
+    const isSelected = selectedKeyframes.some(sk => 
+        sk.layerId === layer.id && sk.index === kfIndex && 
+        (sk.property === property || sk.property === null || property === null)
+    );
+    
+    if (isSelected) {
         keyframeEl.classList.add('selected');
     }
     
@@ -424,16 +452,74 @@ function renderKeyframe(layer, kfIndex, y, property = null) {
     }
     
     keyframeEl.addEventListener('mousedown', (e) => handleKeyframeMouseDown(e, layer.id, kfIndex, property));
+    
+    // タッチイベント（長押しで右クリックメニュー）
+    let touchTimer = null;
+    let touchMoved = false;
+    
     keyframeEl.addEventListener('touchstart', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        touchMoved = false;
+        
         if (e.touches.length === 1) {
-            handleKeyframeTouchStart(e.touches[0], layer.id, kfIndex, property);
+            const touch = e.touches[0];
+            
+            // 長押しタイマー（500ms）
+            touchTimer = setTimeout(() => {
+                if (!touchMoved) {
+                    // 長押し → 右クリックメニュー表示
+                    const isSelected = selectedKeyframes.some(sk => 
+                        sk.layerId === layer.id && sk.index === kfIndex && sk.property === property
+                    );
+                    if (!isSelected) {
+                        selectKeyframe(layer.id, kfIndex, property, false, false);
+                    }
+                    showKeyframeContextMenu(touch.clientX, touch.clientY, layer.id, kfIndex, property);
+                }
+                touchTimer = null;
+            }, 500);
+            
+            handleKeyframeTouchStart(touch, layer.id, kfIndex, property);
         }
     }, { passive: false });
+    
+    keyframeEl.addEventListener('touchmove', (e) => {
+        touchMoved = true;
+        if (touchTimer) {
+            clearTimeout(touchTimer);
+            touchTimer = null;
+        }
+    }, { passive: true });
+    
+    keyframeEl.addEventListener('touchend', (e) => {
+        if (touchTimer) {
+            clearTimeout(touchTimer);
+            touchTimer = null;
+            // 短いタップ → 選択
+            if (!touchMoved) {
+                selectKeyframe(layer.id, kfIndex, property, false, false);
+            }
+        }
+    }, { passive: true });
+    
     keyframeEl.addEventListener('click', (e) => {
         e.stopPropagation();
-        selectKeyframe(layer.id, kfIndex, property);
+        selectKeyframe(layer.id, kfIndex, property, e.shiftKey, e.ctrlKey || e.metaKey);
+    });
+    
+    // 右クリックメニュー
+    keyframeEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // 右クリックしたキーフレームが選択されてなければ単独選択
+        const isSelected = selectedKeyframes.some(sk => 
+            sk.layerId === layer.id && sk.index === kfIndex && sk.property === property
+        );
+        if (!isSelected) {
+            selectKeyframe(layer.id, kfIndex, property, false, false);
+        }
+        showKeyframeContextMenu(e.clientX, e.clientY, layer.id, kfIndex, property);
     });
     
     timelineContent.appendChild(keyframeEl);
@@ -810,14 +896,65 @@ function updateSeekbarPosition(e) {
 }
 
 // ===== キーフレーム選択 =====
-function selectKeyframe(layerId, keyframeIndex, property = null) {
-    selectedKeyframe = { layerId, index: keyframeIndex, property };
+function selectKeyframe(layerId, keyframeIndex, property = null, shiftKey = false, ctrlKey = false) {
+    const newSelection = { layerId, index: keyframeIndex, property };
+    
+    if (shiftKey && selectedKeyframes.length > 0) {
+        // Shift: 範囲選択（同じレイヤー・同じプロパティ内で）
+        const lastSelected = selectedKeyframes[selectedKeyframes.length - 1];
+        if (lastSelected.layerId === layerId && lastSelected.property === property) {
+            const layer = layers.find(l => l.id === layerId);
+            if (layer && layer.keyframes) {
+                const startIdx = Math.min(lastSelected.index, keyframeIndex);
+                const endIdx = Math.max(lastSelected.index, keyframeIndex);
+                for (let i = startIdx; i <= endIdx; i++) {
+                    if (!selectedKeyframes.some(sk => sk.layerId === layerId && sk.index === i && sk.property === property)) {
+                        selectedKeyframes.push({ layerId, index: i, property });
+                    }
+                }
+            }
+        } else {
+            // 違うレイヤー/プロパティなら追加選択
+            if (!selectedKeyframes.some(sk => sk.layerId === layerId && sk.index === keyframeIndex && sk.property === property)) {
+                selectedKeyframes.push(newSelection);
+            }
+        }
+    } else if (ctrlKey) {
+        // Ctrl: トグル選択
+        const existingIndex = selectedKeyframes.findIndex(sk => 
+            sk.layerId === layerId && sk.index === keyframeIndex && sk.property === property
+        );
+        if (existingIndex !== -1) {
+            selectedKeyframes.splice(existingIndex, 1);
+        } else {
+            selectedKeyframes.push(newSelection);
+        }
+    } else {
+        // 通常クリック: 単独選択
+        selectedKeyframes = [newSelection];
+    }
+    
+    // 後方互換性のためselectedKeyframeも更新
+    selectedKeyframe = selectedKeyframes.length > 0 ? selectedKeyframes[selectedKeyframes.length - 1] : null;
+    
+    updateTimeline();
+}
+
+// 全キーフレーム選択解除
+function deselectAllKeyframes() {
+    selectedKeyframes = [];
+    selectedKeyframe = null;
     updateTimeline();
 }
 
 // ===== キーフレームマウスダウン =====
 function handleKeyframeMouseDown(e, layerId, keyframeIndex, property = null) {
     e.stopPropagation();
+    
+    // Shift/Ctrlキーなしの場合は単独選択に更新
+    if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        selectedKeyframes = [{ layerId, index: keyframeIndex, property }];
+    }
     
     selectedKeyframe = { layerId, index: keyframeIndex, property };
     isDraggingKeyframe = true;
@@ -1116,13 +1253,54 @@ function handleKeyframeTouchEnd(e) {
 
 // ===== キーフレーム削除（Deleteキー） =====
 function handleKeyframeDelete(e) {
-    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-    if (!selectedKeyframe) return;
-    
     // プロパティパネルの入力欄にフォーカスがある場合はスキップ
     if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
         return;
     }
+    
+    // Ctrl+C: コピー
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        if (selectedKeyframes.length > 0) {
+            e.preventDefault(); // ブラウザのデフォルトコピーを防止
+            const sk = selectedKeyframes[0];
+            const layer = layers.find(l => l.id === sk.layerId);
+            if (layer && layer.keyframes && layer.keyframes[sk.index]) {
+                if (sk.property) {
+                    // 単一プロパティコピー
+                    copyKeyframeProperty(sk.layerId, sk.index, sk.property);
+                } else {
+                    // 全プロパティコピー
+                    copyKeyframeAll(sk.layerId, sk.index);
+                }
+            }
+        }
+        return;
+    }
+    
+    // Ctrl+V: ペースト（現在フレームに新規キーフレーム挿入）
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        
+        if (!copiedKeyframe) return;
+        
+        // 選択中のレイヤーの現在フレームにペースト
+        if (selectedLayerIds && selectedLayerIds.length > 0) {
+            const currentFrame = Math.floor(currentTime * projectFPS);
+            pasteKeyframeAtFrame(selectedLayerIds[0], currentFrame);
+        }
+        return;
+    }
+    
+    // Delete / Backspace: 削除
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    
+    // 複数選択されている場合
+    if (selectedKeyframes.length > 1) {
+        deleteSelectedKeyframes();
+        return;
+    }
+    
+    if (!selectedKeyframe) return;
     
     const layer = layers.find(l => l.id === selectedKeyframe.layerId);
     if (!layer || !layer.keyframes || !layer.keyframes[selectedKeyframe.index]) return;
@@ -1148,6 +1326,7 @@ function handleKeyframeDelete(e) {
     }
     
     selectedKeyframe = null;
+    selectedKeyframes = [];
     updateTimeline();
     updatePropertiesPanel();
     render();
@@ -1203,6 +1382,22 @@ function applyKeyframeInterpolation() {
         
         if (!layer.keyframes || layer.keyframes.length === 0) return;
         
+        // ループ用のフレームを計算
+        let effectiveFrame = currentFrame;
+        
+        // キーフレームループが有効な場合
+        if (layer.keyframeLoop && layer.keyframes.length >= 2) {
+            const frames = layer.keyframes.map(kf => kf.frame).sort((a, b) => a - b);
+            const firstFrame = frames[0];
+            const lastFrame = frames[frames.length - 1];
+            const duration = lastFrame - firstFrame;
+            
+            if (duration > 0 && currentFrame > lastFrame) {
+                // ループ内の相対フレームを計算
+                effectiveFrame = firstFrame + ((currentFrame - firstFrame) % duration);
+            }
+        }
+        
         // 各プロパティごとに補間を行う
         const properties = ['x', 'y', 'rotation', 'scale', 'opacity'];
         
@@ -1220,20 +1415,20 @@ function applyKeyframeInterpolation() {
                 return;
             }
             
-            // 現在のフレームに対応するキーフレームを探す
+            // 現在のフレーム（ループ適用後）に対応するキーフレームを探す
             let prevKf = null;
             let nextKf = null;
             
             for (let i = 0; i < propKeyframes.length; i++) {
                 const kf = propKeyframes[i];
                 
-                if (kf.frame === currentFrame) {
+                if (kf.frame === effectiveFrame) {
                     // 完全一致
                     layer[prop] = kf[prop];
                     return;
-                } else if (kf.frame < currentFrame) {
+                } else if (kf.frame < effectiveFrame) {
                     prevKf = kf;
-                } else if (kf.frame > currentFrame && !nextKf) {
+                } else if (kf.frame > effectiveFrame && !nextKf) {
                     nextKf = kf;
                     break;
                 }
@@ -1241,10 +1436,10 @@ function applyKeyframeInterpolation() {
             
             // 2つのキーフレーム間で補間
             if (prevKf && nextKf) {
-                const t = (currentFrame - prevKf.frame) / (nextKf.frame - prevKf.frame);
+                const t = (effectiveFrame - prevKf.frame) / (nextKf.frame - prevKf.frame);
                 layer[prop] = prevKf[prop] + (nextKf[prop] - prevKf[prop]) * t;
             }
-            // prevKfのみ（最後のキーフレームより後）
+            // prevKfのみ（最後のキーフレームより後）- ループなしの場合
             else if (prevKf && !nextKf) {
                 layer[prop] = prevKf[prop];
             }
@@ -1547,3 +1742,472 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+
+// ===== キーフレームコンテキストメニュー =====
+
+// コンテキストメニューを閉じる
+function closeContextMenu() {
+    const existing = document.getElementById('keyframe-context-menu');
+    if (existing) existing.remove();
+}
+
+// キーフレーム上の右クリックメニュー
+function showKeyframeContextMenu(x, y, layerId, kfIndex, property) {
+    closeContextMenu();
+    
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !layer.keyframes || !layer.keyframes[kfIndex]) return;
+    
+    const kf = layer.keyframes[kfIndex];
+    const selectedCount = selectedKeyframes.length;
+    
+    const menu = document.createElement('div');
+    menu.id = 'keyframe-context-menu';
+    menu.style.cssText = `
+        position: fixed;
+        left: ${x}px;
+        top: ${y}px;
+        background: var(--chocolate-dark);
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        padding: 4px 0;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        min-width: 180px;
+    `;
+    
+    // 選択数表示（複数選択時）
+    if (selectedCount > 1) {
+        const countInfo = document.createElement('div');
+        countInfo.style.cssText = 'padding: 6px 16px; color: var(--accent-gold); font-size: 11px; border-bottom: 1px solid var(--border-color); margin-bottom: 4px;';
+        countInfo.textContent = `🔷 ${selectedCount}個選択中`;
+        menu.appendChild(countInfo);
+    }
+    
+    // === コピーサブメニュー ===
+    const copyHeader = document.createElement('div');
+    copyHeader.style.cssText = 'padding: 4px 16px; color: var(--biscuit); font-size: 10px; font-weight: bold;';
+    copyHeader.textContent = '📋 コピー';
+    menu.appendChild(copyHeader);
+    
+    // プロパティごとのコピーメニュー
+    const props = [
+        { key: 'x', label: 'X位置', icon: '↔️' },
+        { key: 'y', label: 'Y位置', icon: '↕️' },
+        { key: 'rotation', label: '回転', icon: '🔄' },
+        { key: 'scale', label: 'スケール', icon: '📐' },
+        { key: 'opacity', label: '不透明度', icon: '👁️' }
+    ];
+    
+    props.forEach(p => {
+        if (kf[p.key] !== undefined) {
+            const item = createMenuItem(`  ${p.icon} ${p.label}: ${formatValue(kf[p.key], p.key)}`, () => {
+                copyKeyframeProperty(layerId, kfIndex, p.key);
+                closeContextMenu();
+            });
+            item.style.fontSize = '11px';
+            menu.appendChild(item);
+        }
+    });
+    
+    // 全プロパティコピー
+    const copyAllItem = createMenuItem('  📦 すべてコピー', () => {
+        copyKeyframeAll(layerId, kfIndex);
+        closeContextMenu();
+    });
+    copyAllItem.style.fontSize = '11px';
+    menu.appendChild(copyAllItem);
+    
+    // 区切り線
+    const separator1 = document.createElement('div');
+    separator1.style.cssText = 'height: 1px; background: var(--border-color); margin: 4px 0;';
+    menu.appendChild(separator1);
+    
+    // === ペーストメニュー ===
+    if (copiedKeyframe) {
+        const pasteHeader = document.createElement('div');
+        pasteHeader.style.cssText = 'padding: 4px 16px; color: var(--biscuit); font-size: 10px; font-weight: bold;';
+        pasteHeader.textContent = `📥 ペースト (${copiedKeyframe.property || 'すべて'})`;
+        menu.appendChild(pasteHeader);
+        
+        if (selectedCount > 1) {
+            // 複数選択時: 選択したすべてにペースト
+            const pasteAllItem = createMenuItem(`  選択した${selectedCount}個にペースト`, () => {
+                pasteToSelectedKeyframes();
+                closeContextMenu();
+            });
+            pasteAllItem.style.fontSize = '11px';
+            menu.appendChild(pasteAllItem);
+        } else {
+            // 単独選択時
+            const pasteItem = createMenuItem('  このキーフレームに上書き', () => {
+                pasteKeyframeOverwrite(layerId, kfIndex);
+                closeContextMenu();
+            });
+            pasteItem.style.fontSize = '11px';
+            menu.appendChild(pasteItem);
+        }
+        
+        // 区切り線
+        const separator2 = document.createElement('div');
+        separator2.style.cssText = 'height: 1px; background: var(--border-color); margin: 4px 0;';
+        menu.appendChild(separator2);
+    }
+    
+    // === 削除 ===
+    if (selectedCount > 1) {
+        const deleteItem = createMenuItem(`🗑️ ${selectedCount}個削除`, () => {
+            deleteSelectedKeyframes();
+            closeContextMenu();
+        });
+        deleteItem.style.color = '#ff6b6b';
+        menu.appendChild(deleteItem);
+    } else {
+        const deleteItem = createMenuItem('🗑️ 削除', () => {
+            deleteKeyframeAt(layerId, kfIndex);
+            closeContextMenu();
+        });
+        deleteItem.style.color = '#ff6b6b';
+        menu.appendChild(deleteItem);
+    }
+    
+    document.body.appendChild(menu);
+    
+    // 画面外に出ないように調整
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        menu.style.left = (window.innerWidth - rect.width - 10) + 'px';
+    }
+    if (rect.bottom > window.innerHeight) {
+        menu.style.top = (window.innerHeight - rect.height - 10) + 'px';
+    }
+    
+    // クリックで閉じる
+    setTimeout(() => {
+        document.addEventListener('click', closeContextMenu, { once: true });
+    }, 10);
+}
+
+// 値のフォーマット
+function formatValue(value, key) {
+    if (key === 'rotation') return value.toFixed(1) + '°';
+    if (key === 'scale') return value.toFixed(2);
+    if (key === 'opacity') return (value * 100).toFixed(0) + '%';
+    return value.toFixed(0);
+}
+
+// タイムライン背景の右クリックメニュー（ペースト用）
+function showTimelineContextMenu(x, y, frame) {
+    closeContextMenu();
+    
+    if (!copiedKeyframe) {
+        // コピー済みキーフレームがない場合はメニューを表示しない
+        return;
+    }
+    
+    const menu = document.createElement('div');
+    menu.id = 'keyframe-context-menu';
+    menu.style.cssText = `
+        position: fixed;
+        left: ${x}px;
+        top: ${y}px;
+        background: var(--chocolate-dark);
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        padding: 4px 0;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        min-width: 180px;
+    `;
+    
+    // ペースト（選択中のレイヤーに）
+    if (selectedLayerIds && selectedLayerIds.length > 0) {
+        const pasteItem = createMenuItem(`📥 ${frame}fにペースト`, () => {
+            pasteKeyframeAtFrame(selectedLayerIds[0], frame);
+            closeContextMenu();
+        });
+        menu.appendChild(pasteItem);
+    } else {
+        const info = document.createElement('div');
+        info.style.cssText = 'padding: 8px 12px; color: var(--biscuit); font-size: 11px;';
+        info.textContent = 'レイヤーを選択してください';
+        menu.appendChild(info);
+    }
+    
+    document.body.appendChild(menu);
+    
+    // 画面外に出ないように調整
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        menu.style.left = (window.innerWidth - rect.width - 10) + 'px';
+    }
+    if (rect.bottom > window.innerHeight) {
+        menu.style.top = (window.innerHeight - rect.height - 10) + 'px';
+    }
+    
+    // クリックで閉じる
+    setTimeout(() => {
+        document.addEventListener('click', closeContextMenu, { once: true });
+    }, 10);
+}
+
+// メニューアイテム作成
+function createMenuItem(text, onClick) {
+    const item = document.createElement('div');
+    item.textContent = text;
+    item.style.cssText = `
+        padding: 8px 16px;
+        cursor: pointer;
+        color: var(--biscuit-light);
+        font-size: 12px;
+        transition: background 0.2s;
+    `;
+    item.addEventListener('mouseenter', () => {
+        item.style.background = 'var(--chocolate-medium)';
+    });
+    item.addEventListener('mouseleave', () => {
+        item.style.background = 'transparent';
+    });
+    item.addEventListener('click', onClick);
+    return item;
+}
+
+// 単一プロパティをコピー
+function copyKeyframeProperty(layerId, kfIndex, propertyKey) {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !layer.keyframes || !layer.keyframes[kfIndex]) return;
+    
+    const kf = layer.keyframes[kfIndex];
+    
+    copiedKeyframe = {
+        property: propertyKey,
+        value: kf[propertyKey],
+        sourceLayerName: layer.name
+    };
+    
+    console.log(`📋 ${propertyKey}をコピー: ${formatValue(kf[propertyKey], propertyKey)} (${layer.name})`);
+}
+
+// 全プロパティをコピー
+function copyKeyframeAll(layerId, kfIndex) {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !layer.keyframes || !layer.keyframes[kfIndex]) return;
+    
+    const kf = layer.keyframes[kfIndex];
+    
+    copiedKeyframe = {
+        property: null, // nullは全プロパティを意味する
+        x: kf.x,
+        y: kf.y,
+        rotation: kf.rotation,
+        scale: kf.scale,
+        opacity: kf.opacity,
+        sourceLayerName: layer.name
+    };
+    
+    console.log(`📋 全プロパティをコピー: ${layer.name} [${kf.frame}f]`);
+}
+
+// キーフレームをペースト（上書き）
+function pasteKeyframeOverwrite(layerId, kfIndex) {
+    if (!copiedKeyframe) return;
+    
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !layer.keyframes || !layer.keyframes[kfIndex]) return;
+    
+    const kf = layer.keyframes[kfIndex];
+    
+    // 単一プロパティの場合
+    if (copiedKeyframe.property) {
+        kf[copiedKeyframe.property] = copiedKeyframe.value;
+    } else {
+        // 全プロパティの場合
+        if (copiedKeyframe.x !== undefined) kf.x = copiedKeyframe.x;
+        if (copiedKeyframe.y !== undefined) kf.y = copiedKeyframe.y;
+        if (copiedKeyframe.rotation !== undefined) kf.rotation = copiedKeyframe.rotation;
+        if (copiedKeyframe.scale !== undefined) kf.scale = copiedKeyframe.scale;
+        if (copiedKeyframe.opacity !== undefined) kf.opacity = copiedKeyframe.opacity;
+    }
+    
+    updateTimeline();
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+}
+
+// 選択した複数のキーフレームにペースト
+function pasteToSelectedKeyframes() {
+    if (!copiedKeyframe || selectedKeyframes.length === 0) return;
+    
+    let pastedCount = 0;
+    
+    selectedKeyframes.forEach(sk => {
+        const layer = layers.find(l => l.id === sk.layerId);
+        if (!layer || !layer.keyframes || !layer.keyframes[sk.index]) return;
+        
+        const kf = layer.keyframes[sk.index];
+        
+        // コピー元が単一プロパティの場合
+        if (copiedKeyframe.property) {
+            // 選択されたキーフレームのプロパティにペースト
+            // プロパティ指定があればそこに、なければコピー元のプロパティに
+            const targetProp = sk.property || copiedKeyframe.property;
+            kf[targetProp] = copiedKeyframe.value;
+            pastedCount++;
+        } else {
+            // 全プロパティの場合
+            if (sk.property) {
+                // 特定プロパティが選択されている場合はそのプロパティだけ
+                if (copiedKeyframe[sk.property] !== undefined) {
+                    kf[sk.property] = copiedKeyframe[sk.property];
+                    pastedCount++;
+                }
+            } else {
+                // プロパティ指定なしなら全部
+                if (copiedKeyframe.x !== undefined) kf.x = copiedKeyframe.x;
+                if (copiedKeyframe.y !== undefined) kf.y = copiedKeyframe.y;
+                if (copiedKeyframe.rotation !== undefined) kf.rotation = copiedKeyframe.rotation;
+                if (copiedKeyframe.scale !== undefined) kf.scale = copiedKeyframe.scale;
+                if (copiedKeyframe.opacity !== undefined) kf.opacity = copiedKeyframe.opacity;
+                pastedCount++;
+            }
+        }
+    });
+    
+    updateTimeline();
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+    
+    console.log(`📥 ${pastedCount}個のキーフレームにペースト`);
+}
+
+// 指定フレームにキーフレームをペースト（新規作成）
+function pasteKeyframeAtFrame(layerId, frame) {
+    if (!copiedKeyframe) return;
+    
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    // キーフレーム配列がなければ作成
+    if (!layer.keyframes) {
+        layer.keyframes = [];
+    }
+    
+    // 同じフレームに既存のキーフレームがあるか確認
+    const existingIndex = layer.keyframes.findIndex(kf => kf.frame === frame);
+    
+    if (existingIndex !== -1) {
+        // 既存のキーフレームを上書き
+        const kf = layer.keyframes[existingIndex];
+        if (copiedKeyframe.property) {
+            // 単一プロパティのみ上書き
+            kf[copiedKeyframe.property] = copiedKeyframe.value;
+        } else {
+            // 全プロパティ上書き
+            if (copiedKeyframe.x !== undefined) kf.x = copiedKeyframe.x;
+            if (copiedKeyframe.y !== undefined) kf.y = copiedKeyframe.y;
+            if (copiedKeyframe.rotation !== undefined) kf.rotation = copiedKeyframe.rotation;
+            if (copiedKeyframe.scale !== undefined) kf.scale = copiedKeyframe.scale;
+            if (copiedKeyframe.opacity !== undefined) kf.opacity = copiedKeyframe.opacity;
+        }
+    } else {
+        // 新規キーフレームを作成
+        const newKf = { frame: frame };
+        
+        if (copiedKeyframe.property) {
+            // 単一プロパティの場合はそのプロパティだけ
+            newKf[copiedKeyframe.property] = copiedKeyframe.value;
+        } else {
+            // 全プロパティの場合
+            if (copiedKeyframe.x !== undefined) newKf.x = copiedKeyframe.x;
+            if (copiedKeyframe.y !== undefined) newKf.y = copiedKeyframe.y;
+            if (copiedKeyframe.rotation !== undefined) newKf.rotation = copiedKeyframe.rotation;
+            if (copiedKeyframe.scale !== undefined) newKf.scale = copiedKeyframe.scale;
+            if (copiedKeyframe.opacity !== undefined) newKf.opacity = copiedKeyframe.opacity;
+        }
+        
+        layer.keyframes.push(newKf);
+        layer.keyframes.sort((a, b) => a.frame - b.frame);
+    }
+    
+    updateTimeline();
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+    
+    console.log(`📥 ${frame}fにペースト: ${layer.name}`);
+}
+
+// 指定位置のキーフレームを削除
+function deleteKeyframeAt(layerId, kfIndex) {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !layer.keyframes) return;
+    
+    // 最低1つは残す
+    if (layer.keyframes.length <= 1) {
+        alert('最後のキーフレームは削除できません');
+        return;
+    }
+    
+    layer.keyframes.splice(kfIndex, 1);
+    selectedKeyframe = null;
+    selectedKeyframes = [];
+    
+    updateTimeline();
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+    
+    console.log(`🗑️ キーフレームを削除: ${layer.name}`);
+}
+
+// 選択した複数のキーフレームを削除
+function deleteSelectedKeyframes() {
+    if (selectedKeyframes.length === 0) return;
+    
+    // レイヤーごとにグループ化してインデックスの大きい順に削除
+    const byLayer = {};
+    selectedKeyframes.forEach(sk => {
+        if (!byLayer[sk.layerId]) byLayer[sk.layerId] = [];
+        byLayer[sk.layerId].push(sk.index);
+    });
+    
+    let deletedCount = 0;
+    
+    Object.keys(byLayer).forEach(layerId => {
+        const layer = layers.find(l => l.id === parseInt(layerId));
+        if (!layer || !layer.keyframes) return;
+        
+        // インデックスを降順にソートして削除
+        const indices = byLayer[layerId].sort((a, b) => b - a);
+        
+        indices.forEach(idx => {
+            // 最後の1つは残す
+            if (layer.keyframes.length > 1) {
+                layer.keyframes.splice(idx, 1);
+                deletedCount++;
+            }
+        });
+    });
+    
+    selectedKeyframe = null;
+    selectedKeyframes = [];
+    
+    updateTimeline();
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+    
+    console.log(`🗑️ ${deletedCount}個のキーフレームを削除`);
+}

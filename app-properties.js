@@ -199,6 +199,9 @@ function updateHeaderToolbar() {
 
 // トランスフォームUI生成
 function generateTransformUI(layer) {
+    // ループ設定の状態を取得
+    const loopEnabled = layer.keyframeLoop || false;
+    
     return `
         <div class="property-group">
             <h4>📍 トランスフォーム</h4>
@@ -263,7 +266,7 @@ function generateTransformUI(layer) {
                 </div>
             </div>
             
-            <div style="margin-bottom: 0;">
+            <div style="margin-bottom: 12px;">
                 <label style="font-size: 11px; display: block; margin-bottom: 4px;">
                     不透明度: <span id="transformOpacityValue">${(layer.opacity * 100).toFixed(0)}%</span>
                 </label>
@@ -276,6 +279,21 @@ function generateTransformUI(layer) {
                         oninput="document.getElementById('transformOpacitySlider').value = parseFloat(this.value) / 100; document.getElementById('transformOpacityValue').textContent = this.value + '%'; updateLayerPropertyLive('opacity', parseFloat(this.value) / 100)"
                         onchange="updateLayerProperty('opacity', parseFloat(this.value) / 100); updatePropertiesPanel()">
                 </div>
+            </div>
+            
+            <!-- キーフレームループ設定 -->
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" ${loopEnabled ? 'checked' : ''} 
+                        onchange="toggleKeyframeLoop(this.checked)"
+                        style="width: 16px; height: 16px; cursor: pointer;">
+                    <span style="font-size: 12px; color: var(--biscuit-light);">🔁 キーフレームループ</span>
+                </label>
+                ${loopEnabled ? `
+                <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 10px; color: var(--biscuit);">
+                    ${getKeyframeLoopInfo(layer)}
+                </div>
+                ` : ''}
             </div>
         </div>
     `;
@@ -2983,4 +3001,69 @@ function isDescendantOf(layerId, potentialAncestorId) {
         if (isDescendantOf(layerId, child.id)) return true;
     }
     return false;
+}
+
+// ===== キーフレームループ機能 =====
+
+// ループのオン/オフを切り替え
+function toggleKeyframeLoop(enabled) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer) return;
+    
+    layer.keyframeLoop = enabled;
+    
+    updatePropertiesPanel();
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+    
+    console.log(`🔁 キーフレームループ: ${enabled ? 'ON' : 'OFF'} (${layer.name})`);
+}
+
+// キーフレームループ情報を取得
+function getKeyframeLoopInfo(layer) {
+    if (!layer.keyframes || layer.keyframes.length < 2) {
+        return '⚠️ ループには2つ以上のキーフレームが必要です';
+    }
+    
+    // キーフレームの範囲を取得
+    const frames = layer.keyframes.map(kf => kf.frame).sort((a, b) => a - b);
+    const firstFrame = frames[0];
+    const lastFrame = frames[frames.length - 1];
+    const duration = lastFrame - firstFrame;
+    
+    if (duration <= 0) {
+        return '⚠️ キーフレームの範囲が不正です';
+    }
+    
+    const fps = typeof projectFPS !== 'undefined' ? projectFPS : 24;
+    const durationSec = (duration / fps).toFixed(2);
+    
+    return `📊 ループ範囲: ${firstFrame}f → ${lastFrame}f (${duration}f / ${durationSec}秒)`;
+}
+
+// キーフレームループを適用した値を計算
+function getLoopedKeyframeValue(layer, currentFrame, property) {
+    if (!layer.keyframeLoop || !layer.keyframes || layer.keyframes.length < 2) {
+        return null; // ループなしまたはキーフレーム不足
+    }
+    
+    // キーフレームの範囲を取得
+    const frames = layer.keyframes.map(kf => kf.frame).sort((a, b) => a - b);
+    const firstFrame = frames[0];
+    const lastFrame = frames[frames.length - 1];
+    const duration = lastFrame - firstFrame;
+    
+    if (duration <= 0) return null;
+    
+    // 最後のキーフレーム以降の場合、ループを適用
+    if (currentFrame > lastFrame) {
+        // ループ内の相対フレームを計算
+        const loopedFrame = firstFrame + ((currentFrame - firstFrame) % duration);
+        return loopedFrame;
+    }
+    
+    return null; // ループ範囲内はそのまま
 }
