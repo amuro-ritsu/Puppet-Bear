@@ -162,8 +162,10 @@ function updateTimeline() {
         trackY = renderTimelineLayer(rootLayers[i], trackY, 0);
     }
     
-    // タイムラインの高さを調整
-    timelineContent.style.height = Math.max(300, trackY) + 'px';
+    // タイムラインの高さを調整（コンテナの高さまたはトラック高さの大きい方）
+    const timelineBody = document.querySelector('.timeline-body');
+    const containerHeight = timelineBody ? timelineBody.offsetHeight : 300;
+    timelineContent.style.height = Math.max(containerHeight, trackY) + 'px';
     
     // 再生ヘッドの位置を更新
     updatePlayhead();

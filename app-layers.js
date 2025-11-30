@@ -11,6 +11,10 @@
 function updateLayerList() {
     layerList.innerHTML = '';
     
+    // 固定部分のコンテナ
+    const fixedContainer = document.createElement('div');
+    fixedContainer.style.cssText = 'position: sticky; top: 0; z-index: 10; background: var(--chocolate-dark); padding-bottom: 8px;';
+    
     // ヘッダー（リネームボタン付き）
     const header = document.createElement('div');
     header.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px; background: var(--chocolate-medium); border-radius: 4px;';
@@ -20,7 +24,7 @@ function updateLayerList() {
         <button onclick="deselectAllLayers()" style="padding: 4px 8px; background: var(--chocolate-light); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 10px;" title="選択解除">☐</button>
         <button onclick="showRenameDialog()" style="padding: 4px 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">✏️ リネーム</button>
     `;
-    layerList.appendChild(header);
+    fixedContainer.appendChild(header);
     
     // ===== ボタン群（レイヤー一覧の上に配置） =====
     const buttonContainer = document.createElement('div');
@@ -99,13 +103,15 @@ function updateLayerList() {
     addLayerRow.appendChild(addLayerBtn);
     buttonContainer.appendChild(addLayerRow);
     
-    layerList.appendChild(buttonContainer);
+    fixedContainer.appendChild(buttonContainer);
     
     // 説明
     const info = document.createElement('div');
     info.style.cssText = 'font-size: 10px; color: var(--biscuit); padding: 4px 8px; margin-bottom: 8px; background: var(--chocolate-dark); border-radius: 4px;';
     info.innerHTML = '💡 上のレイヤーが前面 | Shift:範囲選択 | Ctrl:追加選択';
-    layerList.appendChild(info);
+    fixedContainer.appendChild(info);
+    
+    layerList.appendChild(fixedContainer);
     
     // ルートレベルのレイヤーを表示（逆順：上にあるほど上に表示）
     const rootLayers = layers.filter(l => !l.parentLayerId);
