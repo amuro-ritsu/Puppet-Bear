@@ -131,9 +131,8 @@ function render() {
         }
         
         // ジャンプフォルダーの場合（描画は子レイヤー側で行う）
-        if (layer.type === 'jumpFolder') {
-            // ジャンプフォルダー自体は何も描画しない
-            // 子レイヤーの描画時にジャンプオフセットを適用
+        if (layer.type === 'folder') {
+            // フォルダ自体は何も描画しない（ジャンプ機能は子レイヤーの描画時に適用）
             return;
         }
         
@@ -399,7 +398,7 @@ function drawSelectedLayerAnchors(localTime) {
         let anchorPos;
         
         // フォルダーまたはジャンプフォルダーの場合
-        if (layer.type === 'folder' || layer.type === 'jumpFolder') {
+        if (layer.type === 'folder') {
             // 親のトランスフォームを取得
             const parentTransform = getParentTransform(layer.parentLayerId);
             
@@ -919,8 +918,8 @@ function getParentTransform(parentLayerId) {
         let parentX = parent.x;
         let parentY = parent.y;
         
-        // フォルダまたはジャンプフォルダーの歩行アニメーションオフセット
-        if ((parent.type === 'folder' || parent.type === 'jumpFolder') && parent.walkingEnabled && typeof calculateWalkingOffset === 'function') {
+        // フォルダの歩行アニメーションオフセット
+        if (parent.type === 'folder' && parent.walkingEnabled && typeof calculateWalkingOffset === 'function') {
             const walkingOffset = calculateWalkingOffset(parent, currentTime);
             if (walkingOffset.active) {
                 parentX += walkingOffset.x;
@@ -928,12 +927,45 @@ function getParentTransform(parentLayerId) {
             }
         }
         
-        // ジャンプフォルダーのジャンプオフセット
-        if (parent.type === 'jumpFolder' && typeof calculateJumpOffset === 'function') {
+        // フォルダのジャンプオフセット（ジャンプ機能有効時）
+        if (parent.type === 'folder' && parent.jumpParams && typeof calculateJumpOffset === 'function') {
             const jumpOffset = calculateJumpOffset(parent, currentTime);
             parentX += jumpOffset.x;
             parentY += jumpOffset.y;
         }
+        
+        // 現在の累積座標に親の変形を適用
+        const scaledX = result.x * parent.scale;
+        const scaledY = result.y * parent.scale;
+        const parentRad = parent.rotation * Math.PI / 180;
+        const parentCos = Math.cos(parentRad);
+        const parentSin = Math.sin(parentRad);
+        const rotatedX = scaledX * parentCos - scaledY * parentSin;
+        const rotatedY = scaledX * parentSin + scaledY * parentCos;
+        
+        result.x = parentX + rotatedX;
+        result.y = parentY + rotatedY;
+        result.rotation += parent.rotation;
+        result.scale *= parent.scale;
+        
+        parent = layers.find(l => l.id === parent.parentLayerId);
+    }
+    
+    return result;
+}
+
+// ===== 静的な親の変形を取得（アニメーションオフセットなし） =====
+// 親子関係の設定時に使用（ジャンプ・歩行オフセットを除外）
+function getStaticParentTransform(parentLayerId) {
+    let result = { x: 0, y: 0, rotation: 0, scale: 1 };
+    
+    if (!parentLayerId) return result;
+    
+    let parent = layers.find(l => l.id === parentLayerId);
+    while (parent) {
+        // 親の位置を取得（アニメーションオフセットなし）
+        let parentX = parent.x;
+        let parentY = parent.y;
         
         // 現在の累積座標に親の変形を適用
         const scaledX = result.x * parent.scale;
@@ -975,7 +1007,7 @@ function applyParentTransform(layer) {
     // 親の位置に移動
     ctx.translate(parent.x, parent.y);
     
-    // フォルダの場合（ピクセルオフセットでアンカー計算）
+    // フォルダの場合（ジャンプ機能含む）
     if (parent.type === 'folder') {
         // アンカー基準レイヤーがある場合はそのアンカーを使用
         let anchorOffsetX = parent.anchorOffsetX || 0;
@@ -999,33 +1031,11 @@ function applyParentTransform(layer) {
             }
         }
         
-        // アンカーポイントを原点に移動して回転・スケール、その後戻す
-        ctx.translate(anchorOffsetX, anchorOffsetY);
-        ctx.rotate(parent.rotation * Math.PI / 180);
-        ctx.scale(parent.scale, parent.scale);
-        ctx.translate(-anchorOffsetX, -anchorOffsetY);
-        return;
-    }
-    
-    // ジャンプフォルダーの場合
-    if (parent.type === 'jumpFolder') {
-        // アンカー基準レイヤーがある場合はそのアンカーを使用
-        let anchorOffsetX = parent.anchorOffsetX || 0;
-        let anchorOffsetY = parent.anchorOffsetY || 0;
-        
-        if (parent.anchorReferenceLayerId) {
-            const refLayer = layers.find(l => l.id === parent.anchorReferenceLayerId);
-            if (refLayer) {
-                const refAnchor = getLayerAnchorOffset(refLayer);
-                // 基準レイヤーの位置 + アンカーオフセット
-                anchorOffsetX = refLayer.x + refAnchor.offsetX;
-                anchorOffsetY = refLayer.y + refAnchor.offsetY;
-            }
+        // ジャンプオフセットを適用（ジャンプ機能有効時）
+        if (parent.jumpParams && typeof calculateJumpOffset === 'function') {
+            const jumpOffset = calculateJumpOffset(parent, currentTime);
+            ctx.translate(jumpOffset.x, jumpOffset.y);
         }
-        
-        // ジャンプオフセットを計算して適用（X/Y両方）
-        const jumpOffset = calculateJumpOffset(parent, currentTime);
-        ctx.translate(jumpOffset.x, jumpOffset.y);
         
         // アンカーポイントを原点に移動して回転・スケール、その後戻す
         ctx.translate(anchorOffsetX, anchorOffsetY);
@@ -1175,11 +1185,11 @@ function drawFolderWithWindSway(folder, localTime) {
 }
 
 // ===== ジャンプオフセット計算 =====
-function calculateJumpOffset(jumpFolder, localTime) {
-    if (!jumpFolder || jumpFolder.type !== 'jumpFolder') return { x: 0, y: 0 };
-    if (!jumpFolder.jumpParams) return { x: 0, y: 0 };
+function calculateJumpOffset(folder, localTime) {
+    if (!folder || folder.type !== 'folder') return { x: 0, y: 0 };
+    if (!folder.jumpParams) return { x: 0, y: 0 };
     
-    const jp = jumpFolder.jumpParams;
+    const jp = folder.jumpParams;
     const direction = jp.direction || 'up';
     
     let offsetValue = 0;
@@ -1249,7 +1259,7 @@ function calculateJumpOffset(jumpFolder, localTime) {
     }
     
     // フォルダの回転を考慮してワールド座標系に変換
-    const folderRotation = jumpFolder.rotation || 0;
+    const folderRotation = folder.rotation || 0;
     const rad = folderRotation * Math.PI / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);

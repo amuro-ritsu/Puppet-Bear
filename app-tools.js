@@ -140,7 +140,7 @@ function handleCanvasMouseMove(e) {
         let anchorScreenY = layer.y;
         
         // フォルダまたはジャンプフォルダーの場合はanchorOffsetを加算
-        if (layer.type === 'folder' || layer.type === 'jumpFolder') {
+        if (layer.type === 'folder') {
             anchorScreenX += (layer.anchorOffsetX || 0);
             anchorScreenY += (layer.anchorOffsetY || 0);
         }
@@ -201,7 +201,7 @@ function handleCanvasMouseUp(e) {
 // ===== レイヤー内の点判定 =====
 function isPointInLayer(mouseX, mouseY, layer) {
     // フォルダまたはジャンプフォルダーの場合は常にtrueを返す（キャンバスのどこでも操作可能）
-    if (layer.type === 'folder' || layer.type === 'jumpFolder') {
+    if (layer.type === 'folder') {
         return true;
     }
     
@@ -225,7 +225,7 @@ function isPointInLayer(mouseX, mouseY, layer) {
         if (!parent) break;
         
         // フォルダまたはジャンプフォルダーの場合（widthとheightがないので簡略化）
-        if (parent.type === 'folder' || parent.type === 'jumpFolder') {
+        if (parent.type === 'folder') {
             // 親のスケールを適用
             let relX = worldX * parent.scale;
             let relY = worldY * parent.scale;

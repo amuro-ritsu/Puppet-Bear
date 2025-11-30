@@ -170,7 +170,7 @@ function updateHeaderToolbar() {
     
     // フォルダやジャンプフォルダーの場合はスライダーを非表示（ピクセルオフセットなので0-100%では表現不可）
     if (anchorSliders) {
-        if (layer.type === 'folder' || layer.type === 'jumpFolder') {
+        if (layer.type === 'folder') {
             anchorSliders.style.display = 'none';
         } else {
             anchorSliders.style.display = 'flex';
@@ -392,7 +392,7 @@ function generateParentUI(layer) {
                     style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
                     <option value="">なし</option>
                     ${layers.filter(l => l.id !== layer.id).map(l => {
-                        const icon = l.type === 'folder' ? '📁' : (l.type === 'jumpFolder' ? '🦘' : (l.type === 'puppet' ? '🎭' : '🖼️'));
+                        const icon = l.type === 'folder' ? (l.jumpParams ? '🦘' : '📁') : (l.type === 'puppet' ? '🎭' : '🖼️');
                         return `<option value="${l.id}" ${l.id === layer.parentLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
                     }).join('')}
                 </select>
@@ -415,8 +415,8 @@ function updatePropertiesPanel() {
         const availableParents = layers.filter(l => {
             // 選択中のレイヤー自身は除外
             if (selectedLayerIds.includes(l.id)) return false;
-            // ジャンプフォルダ・音声は親になれない
-            if (l.type === 'jumpFolder' || l.type === 'audio') return false;
+            // 音声は親になれない
+            if (l.type === 'audio') return false;
             // 選択中レイヤーの子孫も除外（循環防止）
             for (const selId of selectedLayerIds) {
                 if (isDescendantOf(l.id, selId)) return false;
@@ -483,164 +483,23 @@ function updatePropertiesPanel() {
         clearPuppetAnchorElements();
     }
     
-    // ジャンプフォルダーの場合
-    if (layer.type === 'jumpFolder') {
-        // ジャンプパラメータの初期化チェック
-        if (!layer.jumpParams) {
-            layer.jumpParams = getDefaultJumpParams();
-        }
-        if (layer.jumpParams.loop === undefined) {
-            layer.jumpParams.loop = false;
-        }
-        if (!layer.jumpParams.loopPeriod) {
-            layer.jumpParams.loopPeriod = 1.0;
-        }
-        if (!layer.jumpParams.keyframes) {
-            layer.jumpParams.keyframes = [];
-        }
-        
-        const jp = layer.jumpParams;
-        
-        // 親レイヤー候補（自分自身と子孫を除外）
-        const availableParents = layers.filter(l => {
-            if (l.id === layer.id) return false;
-            if (isDescendantOf(l.id, layer.id)) return false;
-            return true;
-        });
-        
-        // フォルダ内のレイヤー（直接の子）を取得
-        const childLayers = layers.filter(l => l.parentLayerId === layer.id && l.type !== 'folder' && l.type !== 'jumpFolder' && l.type !== 'audio');
-        
-        propertiesPanel.innerHTML = `
-            <h3>🦘 ${layer.name}</h3>
-            
-            ${generateTransformUI(layer)}
-            
-            ${generateBlendModeUI(layer)}
-            
-            <div class="property-group">
-                <h4>⚓ アンカー基準</h4>
-                <label style="font-size: 11px; display: block; margin-bottom: 4px;">基準レイヤー:</label>
-                <select id="folder-anchor-ref" onchange="updateFolderAnchorReference(this.value)" 
-                    style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
-                    <option value="">なし（フォルダ位置）</option>
-                    ${childLayers.map(l => {
-                        const icon = getLayerTypeIcon ? getLayerTypeIcon(l.type) : '🖼️';
-                        return `<option value="${l.id}" ${l.id === layer.anchorReferenceLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
-                    }).join('')}
-                </select>
-                <div style="background: rgba(70, 130, 180, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
-                    💡 選択したレイヤーのアンカーポイントを<br>フォルダの回転・スケール基準にします
-                </div>
-            </div>
-            
-            <div class="property-group">
-                <h4>🔗 親子関係</h4>
-                <label style="font-size: 11px; display: block; margin-bottom: 4px;">親レイヤー:</label>
-                <select id="prop-parent" onchange="updateFolderParent(this.value)" 
-                    style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
-                    <option value="">なし</option>
-                    ${availableParents.map(l => {
-                        const icon = l.type === 'folder' ? '📁' : (l.type === 'jumpFolder' ? '🦘' : (l.type === 'puppet' ? '🎭' : '🖼️'));
-                        return `<option value="${l.id}" ${l.id === layer.parentLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
-                    }).join('')}
-                </select>
-            </div>
-            
-            <div class="property-group">
-                <h4>🦘 ジャンプ制御</h4>
-                
-                <div style="background: rgba(50, 205, 50, 0.15); padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 3px solid #32cd32;">
-                    <div style="font-size: 11px; color: var(--biscuit-light);">
-                        ⭐ <strong>このフォルダ内、または親子付けしたレイヤーがジャンプします</strong><br>
-                        🎯 変形なし・位置のみ移動
-                    </div>
-                </div>
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">ジャンプ方向</label>
-                    <select id="jump-direction-select" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;" onchange="updateJumpParam('direction', this.value)">
-                        <option value="up" ${(jp.direction || 'up') === 'up' ? 'selected' : ''}>⬆️ 上（ジャンプ）</option>
-                        <option value="down" ${jp.direction === 'down' ? 'selected' : ''}>⬇️ 下（落下）</option>
-                        <option value="left" ${jp.direction === 'left' ? 'selected' : ''}>⬅️ 左</option>
-                        <option value="right" ${jp.direction === 'right' ? 'selected' : ''}>➡️ 右</option>
-                    </select>
-                </div>
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        ジャンプの大きさ: <span id="jumpAmplitudeValue">${jp.amplitude}</span>px
-                    </label>
-                    <input type="range" class="property-slider" id="jump-amplitude" value="${jp.amplitude}" 
-                        min="10" max="300" step="5"
-                        oninput="document.getElementById('jumpAmplitudeValue').textContent = this.value + 'px'; updateJumpParam('amplitude', parseInt(this.value))">
-                </div>
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        揺れる回数: <span id="jumpFrequencyValue">${jp.frequency}</span>回
-                    </label>
-                    <input type="range" class="property-slider" id="jump-frequency" value="${jp.frequency}" 
-                        min="1" max="10" step="1"
-                        oninput="document.getElementById('jumpFrequencyValue').textContent = this.value + '回'; updateJumpParam('frequency', parseInt(this.value))">
-                </div>
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        減衰時間: <span id="jumpDampingValue">${jp.dampingTime.toFixed(2)}</span>秒
-                    </label>
-                    <input type="range" class="property-slider" id="jump-damping" value="${jp.dampingTime}" 
-                        min="0.1" max="5.0" step="0.1"
-                        oninput="document.getElementById('jumpDampingValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateJumpParam('dampingTime', parseFloat(this.value))">
-                </div>
-                
-                <!-- ループモード設定 -->
-                <div style="margin-bottom: 12px; padding: 12px; background: ${jp.loop ? 'rgba(0, 255, 128, 0.15)' : 'rgba(50, 205, 50, 0.1)'}; border-radius: 8px; border: 1px solid ${jp.loop ? 'rgba(0, 255, 128, 0.5)' : 'var(--border-color)'};">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: bold;">
-                        <input type="checkbox" id="jump-loop-checkbox" ${jp.loop ? 'checked' : ''} 
-                            onchange="updateJumpLoop(this.checked)"
-                            style="width: 18px; height: 18px; cursor: pointer;">
-                        <span>🔄 ループ再生（減衰なし）</span>
-                    </label>
-                    <div id="jump-loop-period-control" style="margin-top: 10px; display: ${jp.loop ? 'block' : 'none'};">
-                        <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                            ループ周期: <span id="jumpLoopPeriodValue">${(jp.loopPeriod || 1.0).toFixed(2)}</span>秒
-                        </label>
-                        <input type="range" class="property-slider" id="jump-loop-period" value="${jp.loopPeriod || 1.0}" 
-                            min="0.1" max="5.0" step="0.1"
-                            oninput="document.getElementById('jumpLoopPeriodValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateJumpParam('loopPeriod', parseFloat(this.value))">
-                        <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 1往復にかかる時間</small>
-                    </div>
-                    <div style="font-size: 10px; color: ${jp.loop ? '#00ff80' : 'var(--biscuit-light)'}; margin-top: 8px;">
-                        ${jp.loop ? '✅ キーフレーム不要で常にジャンプ' : '💡 チェックすると減衰なしで永続ループ'}
-                    </div>
-                </div>
-                
-                <div id="jump-keyframe-section" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: ${jp.loop ? 'none' : 'block'};">
-                    <h5 style="margin: 8px 0;">キーフレーム（ジャンプ開始点）</h5>
-                    <button onclick="addJumpKeyframe()" style="width: 100%; padding: 8px; background: linear-gradient(135deg, #32cd32, #228b22); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🎬 現在位置に挿入</button>
-                    <div id="jump-keyframe-list" style="margin-top: 8px; max-height: 200px; overflow-y: auto;"></div>
-                </div>
-                
-                <div style="background: rgba(50, 205, 50, 0.2); padding: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
-                    🦘 <strong>ジャンプ</strong> = 位置のみ移動（変形なし）<br>
-                    ↕️↔️ <strong>方向</strong> = 上下左右から選択<br>
-                    🔄 <strong>ループ</strong> = 減衰なしで永続的にジャンプ<br>
-                    📁 <strong>フォルダ内</strong> or <strong>親子付け</strong>で適用
-                </div>
-            </div>
-            
-            ${typeof generateWiggleUI === 'function' ? generateWiggleUI(layer) : ''}
-        `;
-        
-        // キーフレームリストを更新
-        updateJumpKeyframeList();
-        clearPinElements();
-        return;
-    }
-    
-    // フォルダの場合
+    // フォルダの場合（ジャンプ機能統合）
     if (layer.type === 'folder') {
+        // ジャンプパラメータの初期化（有効時のみ）
+        const hasJump = !!layer.jumpParams;
+        if (hasJump) {
+            if (layer.jumpParams.loop === undefined) {
+                layer.jumpParams.loop = false;
+            }
+            if (!layer.jumpParams.loopPeriod) {
+                layer.jumpParams.loopPeriod = 1.0;
+            }
+            if (!layer.jumpParams.keyframes) {
+                layer.jumpParams.keyframes = [];
+            }
+        }
+        const jp = layer.jumpParams || {};
+        
         // フォルダ同士の親子関係用 - 自分自身とその子孫を除外
         const availableParents = layers.filter(l => {
             if (l.id === layer.id) return false; // 自分自身は除外
@@ -649,11 +508,11 @@ function updatePropertiesPanel() {
             return true;
         });
         
-        // フォルダ内のレイヤー（直接の子）を取得
-        const childLayers = layers.filter(l => l.parentLayerId === layer.id && l.type !== 'folder' && l.type !== 'jumpFolder' && l.type !== 'audio');
+        // フォルダ内のレイヤー（直接の子）を取得 - 音声以外すべて
+        const childLayers = layers.filter(l => l.parentLayerId === layer.id && l.type !== 'audio');
         
         propertiesPanel.innerHTML = `
-            <h3>📁 ${layer.name}</h3>
+            <h3>${hasJump ? '🦘' : '📁'} ${layer.name}</h3>
             
             ${generateTransformUI(layer)}
             
@@ -682,14 +541,92 @@ function updatePropertiesPanel() {
                     style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;">
                     <option value="">なし</option>
                     ${availableParents.map(l => {
-                        const icon = l.type === 'folder' ? '📁' : (l.type === 'jumpFolder' ? '🦘' : (l.type === 'puppet' ? '🎭' : '🖼️'));
+                        const icon = l.type === 'folder' ? '📁' : (l.type === 'puppet' ? '🎭' : '🖼️');
                         return `<option value="${l.id}" ${l.id === layer.parentLayerId ? 'selected' : ''}>${icon} ${l.name}</option>`;
                     }).join('')}
                 </select>
-                <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
-                    💡 フォルダは親レイヤーとして機能します<br>
-                    📁 フォルダを動かすと中のレイヤーも一緒に動きます<br>
-                    ✨ 既存の親子関係は維持されます
+            </div>
+            
+            <!-- ジャンプ機能 -->
+            <div class="property-group" style="border: 2px solid ${hasJump ? '#32cd32' : 'var(--border-color)'}; border-radius: 8px; padding: 12px; background: ${hasJump ? 'rgba(50, 205, 50, 0.1)' : 'transparent'};">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: bold; margin-bottom: ${hasJump ? '12px' : '0'};">
+                    <input type="checkbox" id="jump-enabled-checkbox" ${hasJump ? 'checked' : ''} 
+                        onchange="toggleFolderJump(this.checked)"
+                        style="width: 18px; height: 18px; cursor: pointer;">
+                    <span>🦘 ジャンプ機能</span>
+                </label>
+                
+                <div id="jump-settings" style="display: ${hasJump ? 'block' : 'none'};">
+                    <div style="background: rgba(50, 205, 50, 0.15); padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 3px solid #32cd32;">
+                        <div style="font-size: 11px; color: var(--biscuit-light);">
+                            ⭐ <strong>このフォルダ内のレイヤーがジャンプします</strong>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 11px; display: block; margin-bottom: 4px;">ジャンプ方向</label>
+                        <select id="jump-direction-select" style="width: 100%; padding: 6px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 1px solid var(--border-color); border-radius: 4px;" onchange="updateJumpParam('direction', this.value)">
+                            <option value="up" ${(jp.direction || 'up') === 'up' ? 'selected' : ''}>⬆️ 上（ジャンプ）</option>
+                            <option value="down" ${jp.direction === 'down' ? 'selected' : ''}>⬇️ 下（落下）</option>
+                            <option value="left" ${jp.direction === 'left' ? 'selected' : ''}>⬅️ 左</option>
+                            <option value="right" ${jp.direction === 'right' ? 'selected' : ''}>➡️ 右</option>
+                        </select>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                            ジャンプの大きさ: <span id="jumpAmplitudeValue">${jp.amplitude || 50}</span>px
+                        </label>
+                        <input type="range" class="property-slider" id="jump-amplitude" value="${jp.amplitude || 50}" 
+                            min="10" max="300" step="5"
+                            oninput="document.getElementById('jumpAmplitudeValue').textContent = this.value + 'px'; updateJumpParam('amplitude', parseInt(this.value))">
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                            揺れる回数: <span id="jumpFrequencyValue">${jp.frequency || 3}</span>回
+                        </label>
+                        <input type="range" class="property-slider" id="jump-frequency" value="${jp.frequency || 3}" 
+                            min="1" max="10" step="1"
+                            oninput="document.getElementById('jumpFrequencyValue').textContent = this.value + '回'; updateJumpParam('frequency', parseInt(this.value))">
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                            減衰時間: <span id="jumpDampingValue">${(jp.dampingTime || 1.0).toFixed(2)}</span>秒
+                        </label>
+                        <input type="range" class="property-slider" id="jump-damping" value="${jp.dampingTime || 1.0}" 
+                            min="0.1" max="5.0" step="0.1"
+                            oninput="document.getElementById('jumpDampingValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateJumpParam('dampingTime', parseFloat(this.value))">
+                    </div>
+                    
+                    <!-- ループモード設定 -->
+                    <div style="margin-bottom: 12px; padding: 12px; background: ${jp.loop ? 'rgba(0, 255, 128, 0.15)' : 'rgba(50, 205, 50, 0.1)'}; border-radius: 8px; border: 1px solid ${jp.loop ? 'rgba(0, 255, 128, 0.5)' : 'var(--border-color)'};">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: bold;">
+                            <input type="checkbox" id="jump-loop-checkbox" ${jp.loop ? 'checked' : ''} 
+                                onchange="updateJumpLoop(this.checked)"
+                                style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>🔄 ループ再生（減衰なし）</span>
+                        </label>
+                        <div id="jump-loop-period-control" style="margin-top: 10px; display: ${jp.loop ? 'block' : 'none'};">
+                            <label style="font-size: 11px; display: block; margin-bottom: 4px;">
+                                ループ周期: <span id="jumpLoopPeriodValue">${(jp.loopPeriod || 1.0).toFixed(2)}</span>秒
+                            </label>
+                            <input type="range" class="property-slider" id="jump-loop-period" value="${jp.loopPeriod || 1.0}" 
+                                min="0.1" max="5.0" step="0.1"
+                                oninput="document.getElementById('jumpLoopPeriodValue').textContent = parseFloat(this.value).toFixed(2) + '秒'; updateJumpParam('loopPeriod', parseFloat(this.value))">
+                            <small style="font-size: 10px; color: var(--biscuit-light); display: block; margin-top: 4px;">💡 1往復にかかる時間</small>
+                        </div>
+                        <div style="font-size: 10px; color: ${jp.loop ? '#00ff80' : 'var(--biscuit-light)'}; margin-top: 8px;">
+                            ${jp.loop ? '✅ キーフレーム不要で常にジャンプ' : '💡 チェックすると減衰なしで永続ループ'}
+                        </div>
+                    </div>
+                    
+                    <div id="jump-keyframe-section" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: ${jp.loop ? 'none' : 'block'};">
+                        <h5 style="margin: 8px 0;">キーフレーム（ジャンプ開始点）</h5>
+                        <button onclick="addJumpKeyframe()" style="width: 100%; padding: 8px; background: linear-gradient(135deg, #32cd32, #228b22); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🎬 現在位置に挿入</button>
+                        <div id="jump-keyframe-list" style="margin-top: 8px; max-height: 200px; overflow-y: auto;"></div>
+                    </div>
                 </div>
             </div>
             
@@ -699,6 +636,11 @@ function updatePropertiesPanel() {
             
             ${typeof generateWiggleUI === 'function' ? generateWiggleUI(layer) : ''}
         `;
+        
+        // キーフレームリストを更新（ジャンプ機能有効時）
+        if (hasJump) {
+            updateJumpKeyframeList();
+        }
         
         updateToolButtons();
         setupWindSwayEventListeners();
@@ -1851,7 +1793,7 @@ function startAnchorPointPick() {
             if (!parent) break;
             
             // フォルダまたはジャンプフォルダーの場合（widthとheightがないので簡略化）
-            if (parent.type === 'folder' || parent.type === 'jumpFolder') {
+            if (parent.type === 'folder') {
                 // 親のスケールを適用
                 let relX = worldX * parent.scale;
                 let relY = worldY * parent.scale;
@@ -2725,7 +2667,7 @@ function isDescendantOf(layerId, potentialAncestorId) {
 // フォルダの親レイヤーを更新（位置補正付き）
 function updateFolderParent(value) {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || (layer.type !== 'folder' && layer.type !== 'jumpFolder')) return;
+    if (!layer || layer.type !== 'folder') return;
     
     const newParentId = value ? parseInt(value) : null;
     const oldParentId = layer.parentLayerId;
@@ -2743,17 +2685,17 @@ function updateFolderParent(value) {
     }
     
     // ★ 位置補正: 見た目の位置が変わらないように調整 ★
-    // 現在のワールド座標を計算
-    const oldTransform = getParentTransform(oldParentId);
-    const oldWorldX = layer.x + oldTransform.x;
-    const oldWorldY = layer.y + oldTransform.y;
-    
-    // 新しい親のワールド座標を取得
-    const newTransform = getParentTransform(newParentId);
-    
-    // 新しいローカル座標を計算（ワールド座標 - 新しい親の位置）
-    layer.x = oldWorldX - newTransform.x;
-    layer.y = oldWorldY - newTransform.y;
+    // 静的座標を使用（アニメーションオフセットを除外）
+    if (typeof getStaticParentTransform === 'function') {
+        const oldTransform = getStaticParentTransform(oldParentId);
+        const oldWorldX = layer.x + oldTransform.x;
+        const oldWorldY = layer.y + oldTransform.y;
+        
+        const newTransform = getStaticParentTransform(newParentId);
+        
+        layer.x = oldWorldX - newTransform.x;
+        layer.y = oldWorldY - newTransform.y;
+    }
     
     // 親を更新
     layer.parentLayerId = newParentId;
@@ -2770,7 +2712,7 @@ function updateFolderParent(value) {
 // フォルダのアンカー基準レイヤーを更新
 function updateFolderAnchorReference(value) {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || (layer.type !== 'folder' && layer.type !== 'jumpFolder')) return;
+    if (!layer || layer.type !== 'folder') return;
     
     const newRefId = value ? parseInt(value) : null;
     
@@ -2795,10 +2737,34 @@ function updateFolderAnchorReference(value) {
 
 // ===== ジャンプフォルダー関連 =====
 
+// フォルダのジャンプ機能切り替え
+function toggleFolderJump(enabled) {
+    const layer = layers.find(l => l.id === selectedLayerIds[0]);
+    if (!layer || layer.type !== 'folder') return;
+    
+    if (enabled) {
+        // ジャンプ機能を有効化
+        layer.jumpParams = getDefaultJumpParams();
+        console.log('🦘 ジャンプ機能を有効化:', layer.name);
+    } else {
+        // ジャンプ機能を無効化
+        delete layer.jumpParams;
+        console.log('📁 ジャンプ機能を無効化:', layer.name);
+    }
+    
+    updateLayerList();
+    updatePropertiesPanel();
+    render();
+    
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+}
+
 // ジャンプパラメータ更新
 function updateJumpParam(param, value) {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || layer.type !== 'jumpFolder') return;
+    if (!layer || layer.type !== 'folder' || !layer.jumpParams) return;
     
     layer.jumpParams[param] = value;
     render();
@@ -2807,7 +2773,7 @@ function updateJumpParam(param, value) {
 // ジャンプループモード切り替え
 function updateJumpLoop(enabled) {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || layer.type !== 'jumpFolder') return;
+    if (!layer || layer.type !== 'folder' || !layer.jumpParams) return;
     
     layer.jumpParams.loop = enabled;
     
@@ -2836,7 +2802,7 @@ function updateJumpLoop(enabled) {
 // ジャンプキーフレーム追加
 function addJumpKeyframe() {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || layer.type !== 'jumpFolder') return;
+    if (!layer || layer.type !== 'folder' || !layer.jumpParams) return;
     
     if (!layer.jumpParams.keyframes) {
         layer.jumpParams.keyframes = [];
@@ -2873,7 +2839,7 @@ function addJumpKeyframe() {
 // ジャンプキーフレーム削除
 function removeJumpKeyframe(frame) {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || layer.type !== 'jumpFolder') return;
+    if (!layer || layer.type !== 'folder' || !layer.jumpParams) return;
     
     layer.jumpParams.keyframes = layer.jumpParams.keyframes.filter(kf => kf.frame !== frame);
     
@@ -2890,7 +2856,7 @@ function removeJumpKeyframe(frame) {
 // ジャンプキーフレームリスト更新
 function updateJumpKeyframeList() {
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || layer.type !== 'jumpFolder') return;
+    if (!layer || layer.type !== 'folder' || !layer.jumpParams) return;
     
     const listContainer = document.getElementById('jump-keyframe-list');
     if (!listContainer) return;
@@ -2907,39 +2873,6 @@ function updateJumpKeyframeList() {
             <button onclick="removeJumpKeyframe(${kf.frame})" style="padding: 4px 8px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 10px;">✕</button>
         </div>
     `).join('');
-}
-
-// フォルダ親更新（ジャンプフォルダー対応）
-function updateJumpFolderParent(value) {
-    const layer = layers.find(l => l.id === selectedLayerIds[0]);
-    if (!layer || layer.type !== 'jumpFolder') return;
-    
-    const newParentId = value ? parseInt(value) : null;
-    const oldParentId = layer.parentLayerId;
-    
-    if (newParentId === oldParentId) return;
-    
-    // 循環参照チェック
-    if (newParentId && isDescendantOf(newParentId, layer.id)) {
-        alert('循環参照になるため、この親子関係は設定できません');
-        return;
-    }
-    
-    // 位置補正
-    const oldTransform = getParentTransform(oldParentId);
-    const oldWorldX = layer.x + oldTransform.x;
-    const oldWorldY = layer.y + oldTransform.y;
-    
-    const newTransform = getParentTransform(newParentId);
-    
-    layer.x = oldWorldX - newTransform.x;
-    layer.y = oldWorldY - newTransform.y;
-    
-    layer.parentLayerId = newParentId;
-    
-    updateLayerList();
-    updatePropertiesPanel();
-    render();
 }
 
 // ===== 風揺れキーフレーム挿入 =====
@@ -3013,7 +2946,20 @@ function applyMultiParent() {
         // 循環参照チェック
         if (newParentId && isDescendantOf(newParentId, layerId)) return;
         
-        // 親レイヤーを設定（位置補正なしでシンプルに）
+        // 変更がない場合はスキップ
+        if (layer.parentLayerId === newParentId) return;
+        
+        // 位置補正: 見た目の位置が変わらないように調整（静的座標を使用）
+        if (typeof getStaticParentTransform === 'function') {
+            const oldTransform = getStaticParentTransform(layer.parentLayerId);
+            const oldWorldX = layer.x + oldTransform.x;
+            const oldWorldY = layer.y + oldTransform.y;
+            const newTransform = getStaticParentTransform(newParentId);
+            layer.x = oldWorldX - newTransform.x;
+            layer.y = oldWorldY - newTransform.y;
+        }
+        
+        // 親レイヤーを設定
         layer.parentLayerId = newParentId;
     });
     

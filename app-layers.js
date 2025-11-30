@@ -35,13 +35,6 @@ function updateLayerList() {
     folderBtn.onclick = createFolderFromSelection;
     buttonContainer.appendChild(folderBtn);
     
-    // ジャンプフォルダー追加ボタン
-    const jumpFolderBtn = document.createElement('button');
-    jumpFolderBtn.textContent = '🦘 ジャンプフォルダー追加';
-    jumpFolderBtn.style.cssText = 'width: 100%; padding: 8px; background: linear-gradient(135deg, #32cd32, #228b22); color: white; border: 2px solid var(--border-color); border-radius: 6px; cursor: pointer; font-weight: bold;';
-    jumpFolderBtn.onclick = createJumpFolder;
-    buttonContainer.appendChild(jumpFolderBtn);
-    
     // 区切り線
     const separator = document.createElement('div');
     separator.style.cssText = 'height: 1px; background: var(--border-color); margin: 4px 0;';
@@ -466,15 +459,17 @@ function renderLayerItem(layer, depth) {
     const childIndicator = hasChildren ? '📎' : '';
     
     // フォルダの場合
-    if (layer.type === 'folder' || layer.type === 'jumpFolder') {
+    if (layer.type === 'folder') {
         const expanded = layer.expanded !== false;
         const isChecked = selectedLayerIds.includes(layer.id) ? 'checked' : '';
+        // ジャンプ機能有効時はアイコンを変更
+        const jumpIcon = layer.jumpParams ? '🦘' : '';
         
         item.innerHTML = `
             <div class="layer-row-top">
                 <input type="checkbox" class="layer-checkbox" ${isChecked} onclick="event.stopPropagation(); toggleLayerSelection(${layer.id}, this.checked)">
                 <span class="folder-toggle" onclick="toggleFolder(${layer.id}, event)">${expanded ? '▼' : '▶'}</span>
-                <span class="layer-name">${windIcon}${walkIcon}${parentIndicator}${typeIcon} ${layer.name}</span>
+                <span class="layer-name">${windIcon}${walkIcon}${jumpIcon}${parentIndicator}${typeIcon} ${layer.name}</span>
             </div>
             <div class="layer-row-bottom">
                 <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
@@ -483,8 +478,8 @@ function renderLayerItem(layer, depth) {
             </div>
         `;
         
-        // ジャンプフォルダーは緑系の背景、白文字
-        if (layer.type === 'jumpFolder') {
+        // ジャンプ機能有効時は緑系の背景
+        if (layer.jumpParams) {
             item.style.background = 'linear-gradient(135deg, #1a4d1a, #2d6a2d)';
             item.style.borderColor = '#32cd32';
             item.style.color = '#ffffff';
@@ -565,7 +560,7 @@ function renderLayerItem(layer, depth) {
 function getLayerTypeIcon(type) {
     switch (type) {
         case 'folder': return '📁';
-        case 'jumpFolder': return '🦘';
+        case 'folder': return '📁';
         case 'lipsync': return '💬';
         case 'blink': return '👀';
         case 'sequence': return '🎞️';
@@ -752,7 +747,7 @@ function deleteLayer(layerId, event) {
 function toggleFolder(folderId, event) {
     event.stopPropagation();
     const folder = layers.find(l => l.id === folderId);
-    if (folder && (folder.type === 'folder' || folder.type === 'jumpFolder')) {
+    if (folder && (folder.type === 'folder')) {
         folder.expanded = !folder.expanded;
         updateLayerList();
     }
@@ -1281,7 +1276,7 @@ function handleDragOver(e, layerId) {
     
     if (draggedLayerId !== layerId) {
         // ターゲットがフォルダまたはジャンプフォルダーの場合は特別なハイライト
-        if (targetLayer && (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder')) {
+        if (targetLayer && (targetLayer.type === 'folder')) {
             targetElement.style.borderTop = '';
             targetElement.style.background = 'rgba(218, 165, 32, 0.3)';
             targetElement.style.outline = '2px solid var(--accent-gold)';
@@ -1318,9 +1313,9 @@ function handleDrop(e, targetLayerId) {
     if (!draggedLayer || !targetLayer) return false;
     
     // ターゲットがフォルダまたはジャンプフォルダーの場合：フォルダ内に追加
-    if (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder') {
+    if (targetLayer.type === 'folder') {
         // 循環参照チェック（ドラッグしたレイヤーがフォルダの場合）
-        if (draggedLayer.type === 'folder' || draggedLayer.type === 'jumpFolder') {
+        if (draggedLayer.type === 'folder') {
             // ターゲットフォルダがドラッグしたフォルダの子孫でないかチェック
             let checkParent = targetLayer;
             while (checkParent) {
@@ -1488,6 +1483,16 @@ function moveLayerUp(layerId, event) {
         if (layer.parentLayerId) {
             const parent = layers.find(l => l.id === layer.parentLayerId);
             if (parent) {
+                // 位置補正: 見た目の位置が変わらないように調整（静的座標を使用）
+                if (typeof getStaticParentTransform === 'function') {
+                    const oldTransform = getStaticParentTransform(layer.parentLayerId);
+                    const oldWorldX = layer.x + oldTransform.x;
+                    const oldWorldY = layer.y + oldTransform.y;
+                    const newTransform = getStaticParentTransform(parent.parentLayerId);
+                    layer.x = oldWorldX - newTransform.x;
+                    layer.y = oldWorldY - newTransform.y;
+                }
+                
                 // 親の親を自分の親にする（親の外に出る）
                 layer.parentLayerId = parent.parentLayerId;
                 
@@ -1501,7 +1506,17 @@ function moveLayerUp(layerId, event) {
     } else {
         // 上のレイヤーがフォルダの場合、そのフォルダの中に入る
         const targetLayer = siblings[currentIndex + 1];
-        if (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder') {
+        if (targetLayer.type === 'folder') {
+            // 位置補正: 見た目の位置が変わらないように調整（静的座標を使用）
+            if (typeof getStaticParentTransform === 'function') {
+                const oldTransform = getStaticParentTransform(layer.parentLayerId);
+                const oldWorldX = layer.x + oldTransform.x;
+                const oldWorldY = layer.y + oldTransform.y;
+                const newTransform = getStaticParentTransform(targetLayer.id);
+                layer.x = oldWorldX - newTransform.x;
+                layer.y = oldWorldY - newTransform.y;
+            }
+            
             // フォルダの中に入る（最下位に）
             layer.parentLayerId = targetLayer.id;
             
@@ -1547,6 +1562,16 @@ function moveLayerDown(layerId, event) {
         if (layer.parentLayerId) {
             const parent = layers.find(l => l.id === layer.parentLayerId);
             if (parent) {
+                // 位置補正: 見た目の位置が変わらないように調整（静的座標を使用）
+                if (typeof getStaticParentTransform === 'function') {
+                    const oldTransform = getStaticParentTransform(layer.parentLayerId);
+                    const oldWorldX = layer.x + oldTransform.x;
+                    const oldWorldY = layer.y + oldTransform.y;
+                    const newTransform = getStaticParentTransform(parent.parentLayerId);
+                    layer.x = oldWorldX - newTransform.x;
+                    layer.y = oldWorldY - newTransform.y;
+                }
+                
                 // 親の親を自分の親にする（親の外に出る）
                 layer.parentLayerId = parent.parentLayerId;
                 
@@ -1562,7 +1587,17 @@ function moveLayerDown(layerId, event) {
     } else {
         // 下のレイヤーがフォルダの場合、そのフォルダの中に入る
         const targetLayer = siblings[currentIndex - 1];
-        if (targetLayer.type === 'folder' || targetLayer.type === 'jumpFolder') {
+        if (targetLayer.type === 'folder') {
+            // 位置補正: 見た目の位置が変わらないように調整（静的座標を使用）
+            if (typeof getStaticParentTransform === 'function') {
+                const oldTransform = getStaticParentTransform(layer.parentLayerId);
+                const oldWorldX = layer.x + oldTransform.x;
+                const oldWorldY = layer.y + oldTransform.y;
+                const newTransform = getStaticParentTransform(targetLayer.id);
+                layer.x = oldWorldX - newTransform.x;
+                layer.y = oldWorldY - newTransform.y;
+            }
+            
             // フォルダの中に入る
             layer.parentLayerId = targetLayer.id;
             
@@ -1587,46 +1622,6 @@ function moveLayerDown(layerId, event) {
     if (typeof saveHistory === 'function') {
         saveHistory();
     }
-}
-
-// ===== ジャンプフォルダー作成 =====
-function createJumpFolder() {
-    const folder = {
-        id: nextLayerId++,
-        type: 'jumpFolder',
-        name: 'ジャンプフォルダー',
-        x: canvas.width / 2,
-        y: canvas.height / 2,
-        rotation: 0,
-        scale: 1,
-        opacity: 1.0,
-        visible: true,
-        blendMode: 'source-over',
-        parentLayerId: null,
-        anchorOffsetX: 0,
-        anchorOffsetY: 0,
-        // ジャンプパラメータ
-        jumpParams: getDefaultJumpParams(),
-        keyframes: [{
-            frame: 0,
-            x: canvas.width / 2,
-            y: canvas.height / 2,
-            rotation: 0,
-            scale: 1,
-            opacity: 1.0
-        }]
-    };
-    
-    layers.push(folder);
-    updateLayerList();
-    selectLayer(folder.id, false);
-    render();
-    
-    if (typeof saveHistory === 'function') {
-        saveHistory();
-    }
-    
-    console.log('🦘 ジャンプフォルダー作成:', folder.name);
 }
 
 // ===== ジャンプパラメータのデフォルト値 =====
