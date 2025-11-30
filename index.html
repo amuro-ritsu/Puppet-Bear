@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>🐻 Puppet Bear v1.15.1</title>
+    <title>🐻 Puppet Bear v1.15.2</title>
     
     <!-- PWA メタタグ -->
     <meta name="description" content="Puppet Bear - パペットアニメーション編集ツール">
@@ -119,6 +119,8 @@
                 
                 <!-- タイムライン -->
                 <div class="timeline-container">
+                    <!-- リサイズハンドル -->
+                    <div class="timeline-resize-handle" id="timeline-resize-handle"></div>
                     <div class="timeline-header">
                         <span class="timeline-title">🎬 タイムライン</span>
                         
@@ -207,5 +209,86 @@
     <script src="app-project.js"></script>
     <script src="app-touch.js"></script>
     <script src="app.js"></script>
+    
+    <!-- タイムラインリサイズ機能 -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const handle = document.getElementById('timeline-resize-handle');
+        const timelineContainer = document.querySelector('.timeline-container');
+        
+        console.log('🎚️ タイムラインリサイズ初期化', handle, timelineContainer);
+        
+        if (!handle || !timelineContainer) {
+            console.error('リサイズハンドルまたはタイムラインコンテナが見つかりません');
+            return;
+        }
+        
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
+        
+        handle.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = timelineContainer.offsetHeight;
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+            console.log('🎚️ リサイズ開始', startHeight);
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            const delta = startY - e.clientY;
+            const newHeight = Math.max(150, Math.min(window.innerHeight * 0.7, startHeight + delta));
+            timelineContainer.style.height = newHeight + 'px';
+            // タイムラインを再描画
+            if (typeof updateTimeline === 'function') {
+                updateTimeline();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                console.log('🎚️ リサイズ終了', timelineContainer.offsetHeight);
+                // 最終的な再描画
+                if (typeof updateTimeline === 'function') {
+                    updateTimeline();
+                }
+            }
+        });
+        
+        // タッチ対応
+        handle.addEventListener('touchstart', function(e) {
+            isResizing = true;
+            startY = e.touches[0].clientY;
+            startHeight = timelineContainer.offsetHeight;
+            e.preventDefault();
+        }, { passive: false });
+        
+        document.addEventListener('touchmove', function(e) {
+            if (!isResizing) return;
+            const delta = startY - e.touches[0].clientY;
+            const newHeight = Math.max(150, Math.min(window.innerHeight * 0.7, startHeight + delta));
+            timelineContainer.style.height = newHeight + 'px';
+            if (typeof updateTimeline === 'function') {
+                updateTimeline();
+            }
+        }, { passive: true });
+        
+        document.addEventListener('touchend', function() {
+            if (isResizing) {
+                isResizing = false;
+                if (typeof updateTimeline === 'function') {
+                    updateTimeline();
+                }
+            }
+        });
+    });
+    </script>
 </body>
 </html>

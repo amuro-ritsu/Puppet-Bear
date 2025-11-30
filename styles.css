@@ -1757,3 +1757,27 @@ input[type="range"]::-moz-range-track {
     background: var(--chocolate-light);
     border-radius: 4px;
 }
+
+/* ===== タイムラインリサイズハンドル ===== */
+.timeline-resize-handle {
+    height: 10px;
+    background: linear-gradient(to bottom, var(--chocolate-medium), var(--chocolate-dark));
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid var(--border-color);
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.timeline-resize-handle:hover {
+    background: linear-gradient(to bottom, var(--accent-gold), var(--accent-orange));
+}
+
+.timeline-resize-handle::before {
+    content: '≡';
+    color: var(--biscuit);
+    font-size: 12px;
+    letter-spacing: 2px;
+}

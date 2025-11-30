@@ -760,19 +760,26 @@ function createFolderFromSelection() {
         return;
     }
     
-    // 親がないレイヤーのみを取得
+    // 選択されたレイヤーを取得（親があるレイヤーも含む）
     const layersToMove = [];
     selectedLayerIds.forEach(layerId => {
         const layer = layers.find(l => l.id === layerId);
-        if (layer && layer.parentLayerId === null) {
+        if (layer) {
             layersToMove.push(layer);
         }
     });
     
     if (layersToMove.length === 0) {
-        alert('親がないレイヤーを選択してください');
+        alert('レイヤーを選択してください');
         return;
     }
+    
+    // 選択されたレイヤーの共通の親を取得（新しいフォルダの親になる）
+    const commonParent = layersToMove[0].parentLayerId;
+    const allSameParent = layersToMove.every(l => l.parentLayerId === commonParent);
+    
+    // 共通の親がない場合、新しいフォルダは親なしになる
+    const newFolderParent = allSameParent ? commonParent : null;
     
     // 選択されたレイヤーの中心位置を計算
     let sumX = 0, sumY = 0;
@@ -790,7 +797,7 @@ function createFolderFromSelection() {
         name: '新規フォルダ',
         expanded: true,
         visible: true,
-        parentLayerId: null,
+        parentLayerId: newFolderParent, // 共通の親を継承
         
         // トランスフォーム（選択レイヤーの中心に配置）
         x: centerX,
@@ -842,6 +849,21 @@ function createFolderFromSelection() {
         
         // フォルダを親に設定
         layer.parentLayerId = folder.id;
+    });
+    
+    // ★ 配列順序を変更：選択したレイヤーをフォルダの直後に移動 ★
+    // まず選択したレイヤーを配列から削除
+    layersToMove.forEach(layer => {
+        const index = layers.indexOf(layer);
+        if (index > -1) {
+            layers.splice(index, 1);
+        }
+    });
+    
+    // フォルダの直後に選択したレイヤーを挿入（元の順序を維持）
+    const folderIndex = layers.indexOf(folder);
+    layersToMove.forEach((layer, i) => {
+        layers.splice(folderIndex + 1 + i, 0, layer);
     });
     
     // フォルダを選択
@@ -1517,16 +1539,24 @@ function moveLayerUp(layerId, event) {
                 layer.y = oldWorldY - newTransform.y;
             }
             
-            // フォルダの中に入る（最下位に）
+            // フォルダの中に入る
             layer.parentLayerId = targetLayer.id;
             
-            // 配列内での位置も調整
+            // 配列内での位置を調整（フォルダの子の最後尾 = 最前面に配置）
             const layerGlobalIndex = layers.indexOf(layer);
-            const targetGlobalIndex = layers.indexOf(targetLayer);
             layers.splice(layerGlobalIndex, 1);
-            // フォルダの直前に配置（子として最下位）
-            const adjustedTargetIndex = layerGlobalIndex < targetGlobalIndex ? targetGlobalIndex - 1 : targetGlobalIndex;
-            layers.splice(adjustedTargetIndex, 0, layer);
+            
+            // フォルダの子レイヤーを全て取得して、その最後の子の次に配置
+            const folderChildren = layers.filter(l => l.parentLayerId === targetLayer.id);
+            if (folderChildren.length > 0) {
+                const lastChild = folderChildren[folderChildren.length - 1];
+                const lastChildIndex = layers.indexOf(lastChild);
+                layers.splice(lastChildIndex + 1, 0, layer);
+            } else {
+                // 子がない場合はフォルダの直後
+                const targetGlobalIndex = layers.indexOf(targetLayer);
+                layers.splice(targetGlobalIndex + 1, 0, layer);
+            }
         } else {
             // 通常の入れ替え
             const globalIndex = layers.indexOf(layer);
@@ -1601,11 +1631,13 @@ function moveLayerDown(layerId, event) {
             // フォルダの中に入る
             layer.parentLayerId = targetLayer.id;
             
-            // 配列内での位置も調整（フォルダの直後に移動）
+            // 配列内での位置を調整（フォルダの子の先頭 = 最背面に配置）
             const layerGlobalIndex = layers.indexOf(layer);
-            const targetGlobalIndex = layers.indexOf(targetLayer);
             layers.splice(layerGlobalIndex, 1);
-            layers.splice(targetGlobalIndex, 0, layer);
+            
+            // フォルダの直後に配置（子の先頭 = 最背面）
+            const targetGlobalIndex = layers.indexOf(targetLayer);
+            layers.splice(targetGlobalIndex + 1, 0, layer);
         } else {
             // 通常の入れ替え
             const globalIndex = layers.indexOf(layer);
