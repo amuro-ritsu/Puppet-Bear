@@ -294,7 +294,7 @@ function render() {
         targetCtx.scale(layer.scale, layer.scale);
         
         if (layer.windSwayEnabled) {
-            // 風揺れ適用
+            // 風揺れ適用（マスクはdrawLayerWithWindSway内で画像に適用済み）
             if (useClipping) {
                 // 風揺れ用に一時的にグローバルコンテキストを切り替え
                 const originalCtx = ctx;
@@ -690,6 +690,12 @@ function drawLipSyncLayer(layer, time) {
     ctx.scale(layer.scale, layer.scale);
     
     // 画像を描画
+    // マスクを適用
+    let maskApplied = false;
+    if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
+        maskApplied = applyMaskToContext(ctx, layer, -anchorOffsetX, -anchorOffsetY);
+    }
+    
     ctx.drawImage(
         currentImg,
         -anchorOffsetX,
@@ -697,6 +703,11 @@ function drawLipSyncLayer(layer, time) {
         width,
         height
     );
+    
+    // マスクを解除
+    if (maskApplied && typeof restoreFromMask === 'function') {
+        restoreFromMask(ctx);
+    }
     
     // アンカーポイント表示 - 書き出し中は描画しない
     if (typeof isExporting === 'undefined' || !isExporting) {
@@ -786,6 +797,12 @@ function drawBlinkLayer(layer, time) {
     ctx.scale(layer.scale, layer.scale);
     
     // 画像を描画
+    // マスクを適用
+    let blinkMaskApplied = false;
+    if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
+        blinkMaskApplied = applyMaskToContext(ctx, layer, -anchorOffsetX, -anchorOffsetY);
+    }
+    
     ctx.drawImage(
         currentImg,
         -anchorOffsetX,
@@ -793,6 +810,11 @@ function drawBlinkLayer(layer, time) {
         width,
         height
     );
+    
+    // マスクを解除
+    if (blinkMaskApplied && typeof restoreFromMask === 'function') {
+        restoreFromMask(ctx);
+    }
     
     // アンカーポイント表示 - 書き出し中は描画しない
     if (typeof isExporting === 'undefined' || !isExporting) {
@@ -885,6 +907,12 @@ function drawSequenceLayer(layer, localTime) {
     ctx.scale(layer.scale, layer.scale);
     
     // 画像を描画（有効な画像のみ）
+    // マスクを適用
+    let seqMaskApplied = false;
+    if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
+        seqMaskApplied = applyMaskToContext(ctx, layer, -anchorOffsetX, -anchorOffsetY);
+    }
+    
     if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
         ctx.drawImage(
             currentImg,
@@ -893,6 +921,11 @@ function drawSequenceLayer(layer, localTime) {
             width,
             height
         );
+    }
+    
+    // マスクを解除
+    if (seqMaskApplied && typeof restoreFromMask === 'function') {
+        restoreFromMask(ctx);
     }
     
     // アンカーポイント表示 - 書き出し中は描画しない

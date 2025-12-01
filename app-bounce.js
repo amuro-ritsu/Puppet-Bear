@@ -641,8 +641,17 @@ function drawBounceLayer(layer, localTime) {
         // スケール（アンカーポイントを中心に）
         ctx.scale(transform.scale, transform.scale);
         
+        // マスクが有効な場合、マスク適用済み画像を使用
+        let imgToUse = layer.img;
+        if (typeof createMaskedImage === 'function' && typeof hasMaskEnabled === 'function' && hasMaskEnabled(layer)) {
+            const maskedImg = createMaskedImage(layer);
+            if (maskedImg) {
+                imgToUse = maskedImg;
+            }
+        }
+        
         // 揺れモーション適用（ループモード: animationStartTime = 0）
-        applyBounceWebGL(ctx, layer.img, layer.width, layer.height, localTime, activeParams, 0, keyframeAnchorX, keyframeAnchorY, anchorRotation);
+        applyBounceWebGL(ctx, imgToUse, layer.width, layer.height, localTime, activeParams, 0, keyframeAnchorX, keyframeAnchorY, anchorRotation);
         
         // アンカーポイント表示 - 書き出し中は描画しない
         if (typeof isExporting === 'undefined' || !isExporting) {
@@ -695,8 +704,19 @@ function drawBounceLayer(layer, localTime) {
         // スケール（アンカーポイントを中心に）
         ctx.scale(transform.scale, transform.scale);
         
+        // マスクを適用
+        let bounceNormalMaskApplied = false;
+        if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
+            bounceNormalMaskApplied = applyMaskToContext(ctx, layer, -anchorOffsetX, -anchorOffsetY);
+        }
+        
         // 画像を描画（アンカーポイントを基準に）
         ctx.drawImage(layer.img, -anchorOffsetX, -anchorOffsetY, layer.width, layer.height);
+        
+        // マスクを解除
+        if (bounceNormalMaskApplied && typeof restoreFromMask === 'function') {
+            restoreFromMask(ctx);
+        }
         
         // アンカーポイント表示 - 書き出し中は描画しない
         if (typeof isExporting === 'undefined' || !isExporting) {
@@ -813,8 +833,17 @@ function drawBounceLayer(layer, localTime) {
     // スケール（アンカーポイントを中心に）
     ctx.scale(transform.scale, transform.scale);
     
+    // マスクが有効な場合、マスク適用済み画像を使用
+    let imgToUseKf = layer.img;
+    if (typeof createMaskedImage === 'function' && typeof hasMaskEnabled === 'function' && hasMaskEnabled(layer)) {
+        const maskedImg = createMaskedImage(layer);
+        if (maskedImg) {
+            imgToUseKf = maskedImg;
+        }
+    }
+    
     // 揺れモーション適用（キーフレームのアンカー座標を使用）
-    applyBounceWebGL(ctx, layer.img, layer.width, layer.height, localTime, activeParams, animationStartTime, keyframeAnchorX, keyframeAnchorY, anchorRotation);
+    applyBounceWebGL(ctx, imgToUseKf, layer.width, layer.height, localTime, activeParams, animationStartTime, keyframeAnchorX, keyframeAnchorY, anchorRotation);
     
     // アンカーポイント表示 - 書き出し中は描画しない
     if (typeof isExporting === 'undefined' || !isExporting) {

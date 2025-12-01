@@ -590,8 +590,17 @@ function drawLayerWithWindSway(layer, anchorX, anchorY, localTime) {
             animationStartTime = getWindSwayAnimationStartTime(layer, localTime);
         }
         
+        // マスクが有効な場合、マスク適用済み画像を使用
+        let imgToUse = layer.img;
+        if (typeof createMaskedImage === 'function' && typeof hasMaskEnabled === 'function' && hasMaskEnabled(layer)) {
+            const maskedImg = createMaskedImage(layer);
+            if (maskedImg) {
+                imgToUse = maskedImg;
+            }
+        }
+        
         // アンカーポイントを軸にして揺らす（アンカー回転を適用）
-        applyWindShakeWebGL(ctx, layer.img, layer.width, layer.height, localTime, layer.windSwayParams, layer.anchorX, layer.anchorY, anchorRotation, animationStartTime);
+        applyWindShakeWebGL(ctx, imgToUse, layer.width, layer.height, localTime, layer.windSwayParams, layer.anchorX, layer.anchorY, anchorRotation, animationStartTime);
     } else {
         ctx.drawImage(layer.img, anchorX, anchorY, layer.width, layer.height);
     }

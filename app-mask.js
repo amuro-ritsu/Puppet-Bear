@@ -591,6 +591,54 @@ function restoreFromMask(ctx) {
     ctx.restore();
 }
 
+// ===== マスク適用済み画像を生成 =====
+// エフェクト（風揺れ、揺れモーション等）適用前に使用
+function createMaskedImage(layer) {
+    if (!layer.mask || !layer.mask.enabled || !layer.mask.path || !layer.img) {
+        return null;
+    }
+    
+    const mask = layer.mask;
+    const path = mask.path;
+    
+    // 一時キャンバスを作成
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = layer.width;
+    tempCanvas.height = layer.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // マスクパスを描画
+    tempCtx.beginPath();
+    
+    if (path.type === 'rect') {
+        tempCtx.rect(path.x, path.y, path.width, path.height);
+    } else if (path.type === 'ellipse') {
+        tempCtx.ellipse(path.cx, path.cy, path.rx, path.ry, 0, 0, Math.PI * 2);
+    } else if (path.type === 'bezier' && path.points && path.points.length >= 3) {
+        drawBezierPath(tempCtx, path.points, 0, 0);
+    }
+    
+    tempCtx.closePath();
+    
+    // 反転モード
+    if (mask.inverted) {
+        tempCtx.rect(0, 0, layer.width, layer.height);
+        tempCtx.clip('evenodd');
+    } else {
+        tempCtx.clip();
+    }
+    
+    // クリッピング領域に画像を描画
+    tempCtx.drawImage(layer.img, 0, 0, layer.width, layer.height);
+    
+    return tempCanvas;
+}
+
+// ===== レイヤーにマスクが有効かチェック =====
+function hasMaskEnabled(layer) {
+    return layer.mask && layer.mask.enabled && layer.mask.path;
+}
+
 // ===== ベジェパスを描画 =====
 function drawBezierPath(ctx, points, offsetX = 0, offsetY = 0) {
     if (points.length < 2) return;
