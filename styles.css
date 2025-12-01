@@ -543,8 +543,8 @@ body {
     background: transparent !important;
     border: none !important;
     padding: 2px !important;
-    min-width: 28px;
-    min-height: 28px;
+    min-width: 32px;
+    min-height: 32px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -552,8 +552,8 @@ body {
 }
 
 .layer-delete-btn img {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     object-fit: contain;
 }
 
@@ -571,14 +571,18 @@ body {
     
     .layer-visibility-btn,
     .layer-delete-btn {
-        min-width: 36px;
-        min-height: 36px;
+        min-width: 40px;
+        min-height: 40px;
     }
     
-    .layer-visibility-btn img,
+    .layer-visibility-btn img {
+        width: 32px;
+        height: 32px;
+    }
+    
     .layer-delete-btn img {
-        width: 30px;
-        height: 30px;
+        width: 38px;
+        height: 38px;
     }
 }
 

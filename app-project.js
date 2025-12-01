@@ -81,7 +81,7 @@ async function saveProject() {
         // プロジェクト設定
         const projectData = {
             version: '1.0.0',
-            appVersion: 'Puppet Bear v1.15.0',
+            appVersion: 'Puppet Bear v1.15.2',
             createdAt: new Date().toISOString(),
             settings: {
                 fps: projectFPS,
@@ -95,7 +95,7 @@ async function saveProject() {
         // JSONを保存
         zip.file('project.json', JSON.stringify(projectData, null, 2));
         
-        // ZIPを生成してダウンロード
+        // ZIPを生成
         updateProgressOverlay(progressOverlay, 'ZIPファイルを生成中...');
         
         const content = await zip.generateAsync({ 
@@ -106,19 +106,50 @@ async function saveProject() {
             updateProgressOverlay(progressOverlay, `圧縮中... ${Math.round(metadata.percent)}%`);
         });
         
-        // ダウンロード
+        // デフォルトのファイル名
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const filename = `puppet-bear-project_${timestamp}.pbear`;
+        const defaultFilename = `puppet-bear-project_${timestamp}.pbear`;
         
+        // ファイル保存ダイアログを表示（対応ブラウザの場合）
+        if ('showSaveFilePicker' in window) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: defaultFilename,
+                    types: [{
+                        description: 'Puppet Bear Project',
+                        accept: { 'application/octet-stream': ['.pbear'] }
+                    }]
+                });
+                
+                const writable = await handle.createWritable();
+                await writable.write(content);
+                await writable.close();
+                
+                document.body.removeChild(progressOverlay);
+                console.log('✅ プロジェクトを保存しました:', handle.name);
+                return;
+            } catch (err) {
+                // ユーザーがキャンセルした場合
+                if (err.name === 'AbortError') {
+                    document.body.removeChild(progressOverlay);
+                    console.log('💾 保存がキャンセルされました');
+                    return;
+                }
+                // その他のエラーはフォールバック処理へ
+                console.warn('showSaveFilePicker failed, falling back:', err);
+            }
+        }
+        
+        // フォールバック: 従来のダウンロード方式
         const url = URL.createObjectURL(content);
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename;
+        a.download = defaultFilename;
         a.click();
         URL.revokeObjectURL(url);
         
         document.body.removeChild(progressOverlay);
-        console.log('✅ プロジェクトを保存しました:', filename);
+        console.log('✅ プロジェクトを保存しました:', defaultFilename);
         
     } catch (error) {
         console.error('❌ プロジェクト保存エラー:', error);
