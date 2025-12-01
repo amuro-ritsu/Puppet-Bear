@@ -15,6 +15,11 @@ const imageDataUrlCache = new Map();
 function getImageDataUrl(img) {
     if (!img) return null;
     
+    // すでにDataURL形式ならそのまま返す
+    if (img.src && img.src.startsWith('data:')) {
+        return img.src;
+    }
+    
     // キャッシュにあればそれを返す
     if (imageDataUrlCache.has(img.src)) {
         return imageDataUrlCache.get(img.src);
@@ -23,8 +28,10 @@ function getImageDataUrl(img) {
     // Canvasに描画してDataURLを生成
     try {
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = img.naturalWidth || img.width;
-        tempCanvas.height = img.naturalHeight || img.height;
+        const w = img.naturalWidth || img.width || 100;
+        const h = img.naturalHeight || img.height || 100;
+        tempCanvas.width = w;
+        tempCanvas.height = h;
         const tempCtx = tempCanvas.getContext('2d', { alpha: true });
         tempCtx.drawImage(img, 0, 0);
         const dataUrl = tempCanvas.toDataURL('image/png');
@@ -75,6 +82,15 @@ function serializeLayer(layer) {
         case 'folder':
             serialized.collapsed = layer.collapsed;
             serialized.childrenIds = layer.childrenIds ? [...layer.childrenIds] : [];
+            // ジャンプパラメータ
+            if (layer.jumpParams) {
+                serialized.jumpParams = JSON.parse(JSON.stringify(layer.jumpParams));
+            }
+            // 歩行アニメーション
+            if (layer.walkingEnabled !== undefined) {
+                serialized.walkingEnabled = layer.walkingEnabled;
+                serialized.walkingParams = layer.walkingParams ? JSON.parse(JSON.stringify(layer.walkingParams)) : null;
+            }
             break;
             
         case 'lipsync':
@@ -122,6 +138,17 @@ function serializeLayer(layer) {
     if (layer.windSwayEnabled !== undefined) {
         serialized.windSwayEnabled = layer.windSwayEnabled;
         serialized.windSwayParams = layer.windSwayParams ? JSON.parse(JSON.stringify(layer.windSwayParams)) : null;
+    }
+    
+    // Wiggle振動エフェクト
+    if (layer.wiggleEnabled !== undefined) {
+        serialized.wiggleEnabled = layer.wiggleEnabled;
+        serialized.wiggleParams = layer.wiggleParams ? JSON.parse(JSON.stringify(layer.wiggleParams)) : null;
+    }
+    
+    // キーフレームループ
+    if (layer.keyframeLoop !== undefined) {
+        serialized.keyframeLoop = layer.keyframeLoop;
     }
     
     // 色抜きクリッピング
@@ -199,15 +226,22 @@ async function loadHistory() {
         
         // 画像の復元
         if (layerData.imgDataUrl) {
-            layer.img = await loadImageFromDataUrl(layerData.imgDataUrl);
+            const img = await loadImageFromDataUrl(layerData.imgDataUrl);
+            if (img) {
+                layer.img = img;
+            } else {
+                console.warn('画像復元失敗、DataURLを保持:', layer.name);
+                // 画像オブジェクトが作れない場合、後で再試行できるようDataURLを保持
+            }
             delete layer.imgDataUrl;
         }
         
         // 連番画像の復元（口パク・まばたき）
         if (layerData.imagesDataUrls && layerData.imagesDataUrls.length > 0) {
-            layer.images = await Promise.all(
+            const loadedImages = await Promise.all(
                 layerData.imagesDataUrls.map(url => loadImageFromDataUrl(url))
             );
+            layer.images = loadedImages.filter(img => img !== null);
             delete layer.imagesDataUrls;
         }
         
