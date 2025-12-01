@@ -247,8 +247,23 @@ function renderTimelineLayer(layer, y, depth) {
     layerTrack.style.top = y + 'px';
     timelineContent.appendChild(layerTrack);
     
-    // キーフレームを描画（口パク・まばたき・揺れモーションレイヤーの場合）
+    // キーフレームを描画
+    // 通常の画像レイヤーのキーフレームを描画
+    if (layer.type === 'image' && layer.keyframes) {
+        layer.keyframes.forEach((kf, kfIndex) => {
+            renderKeyframe(layer, kfIndex, y + 20);
+        });
+    }
+    
+    // 口パク・まばたきレイヤーのキーフレームを描画
     if ((layer.type === 'lipsync' || layer.type === 'blink') && layer.keyframes) {
+        layer.keyframes.forEach((kf, kfIndex) => {
+            renderKeyframe(layer, kfIndex, y + 20);
+        });
+    }
+    
+    // フォルダレイヤーのキーフレームを描画
+    if (layer.type === 'folder' && layer.keyframes) {
         layer.keyframes.forEach((kf, kfIndex) => {
             renderKeyframe(layer, kfIndex, y + 20);
         });
