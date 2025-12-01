@@ -600,7 +600,12 @@ function renderLayerItem(layer, depth) {
             <div class="layer-row-bottom">
                 <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
                 <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
-                <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
+                <button class="layer-visibility-btn" onclick="toggleLayerVisibility(${layer.id}, event)" title="表示切替">
+                    <img src="${layer.visible !== false ? 'bear-eye-open.png' : 'bear-eye-close.png'}" alt="visibility">
+                </button>
+                <button class="layer-delete-btn" onclick="deleteLayer(${layer.id}, event)" title="削除">
+                    <img src="icon-delete.png" alt="delete">
+                </button>
             </div>
         `;
         
@@ -642,8 +647,12 @@ function renderLayerItem(layer, depth) {
             <div class="layer-row-bottom">
                 <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
                 <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
-                <button onclick="toggleLayerVisibility(${layer.id}, event)">${layer.visible ? '👀' : '🙈'}</button>
-                <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
+                <button class="layer-visibility-btn" onclick="toggleLayerVisibility(${layer.id}, event)" title="表示切替">
+                    <img src="${layer.visible !== false ? 'bear-eye-open.png' : 'bear-eye-close.png'}" alt="visibility">
+                </button>
+                <button class="layer-delete-btn" onclick="deleteLayer(${layer.id}, event)" title="削除">
+                    <img src="icon-delete.png" alt="delete">
+                </button>
             </div>
         `;
         
@@ -667,8 +676,12 @@ function renderLayerItem(layer, depth) {
             <div class="layer-row-bottom">
                 <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
                 <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
-                <button onclick="toggleLayerVisibility(${layer.id}, event)">${layer.visible ? '👀' : '🙈'}</button>
-                <button onclick="deleteLayer(${layer.id}, event)">🗑️</button>
+                <button class="layer-visibility-btn" onclick="toggleLayerVisibility(${layer.id}, event)" title="表示切替">
+                    <img src="${layer.visible !== false ? 'bear-eye-open.png' : 'bear-eye-close.png'}" alt="visibility">
+                </button>
+                <button class="layer-delete-btn" onclick="deleteLayer(${layer.id}, event)" title="削除">
+                    <img src="icon-delete.png" alt="delete">
+                </button>
             </div>
         `;
         

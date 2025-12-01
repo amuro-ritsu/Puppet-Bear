@@ -515,12 +515,70 @@ body {
     color: var(--chocolate-dark) !important;
 }
 
+/* 表示切り替えボタン（クマ目アイコン） */
+.layer-visibility-btn {
+    background: transparent !important;
+    border: none !important;
+    padding: 2px !important;
+    min-width: 28px;
+    min-height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.layer-visibility-btn img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.layer-visibility-btn:hover {
+    transform: scale(1.1);
+}
+
+/* 削除ボタン（ゴミ箱クマアイコン） */
+.layer-delete-btn {
+    background: transparent !important;
+    border: none !important;
+    padding: 2px !important;
+    min-width: 28px;
+    min-height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.layer-delete-btn img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.layer-delete-btn:hover {
+    transform: scale(1.1);
+}
+
 /* タッチデバイス向けに移動ボタンを大きく */
 @media (pointer: coarse) {
     .layer-move-btn {
         min-width: 36px;
         min-height: 36px;
         font-size: 1rem !important;
+    }
+    
+    .layer-visibility-btn,
+    .layer-delete-btn {
+        min-width: 36px;
+        min-height: 36px;
+    }
+    
+    .layer-visibility-btn img,
+    .layer-delete-btn img {
+        width: 30px;
+        height: 30px;
     }
 }
 
