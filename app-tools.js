@@ -388,6 +388,12 @@ function zoomCanvas(delta) {
     applyCanvasZoom();
 }
 
+// ズームをスライダーから設定
+function setCanvasZoom(value) {
+    canvasZoom = Math.max(0.1, Math.min(5.0, parseFloat(value)));
+    applyCanvasZoom();
+}
+
 // ズームをリセット
 function resetCanvasZoom() {
     canvasZoom = 1.0;
@@ -428,18 +434,31 @@ function applyCanvasZoom() {
     if (zoomValue) {
         zoomValue.textContent = Math.round(canvasZoom * 100) + '%';
     }
+    
+    // スライダーを更新
+    const zoomSlider = document.getElementById('canvas-zoom-slider');
+    if (zoomSlider) {
+        zoomSlider.value = canvasZoom;
+    }
 }
 
-// マウスホイールでズーム - 無効化（レイヤー操作と競合するため）
-// プレビューのズームはボタン（➕➖）で行う
+// マウスホイールでズーム
 function handleCanvasWheel(e) {
-    // 何もしない - ホイールはレイヤー操作に使用
+    // Ctrlキーが押されている場合、またはマスク編集中でない場合はズーム
+    // マスク編集中は誤操作防止のためCtrl必須にする
+    const allowZoom = e.ctrlKey || (typeof maskEditMode === 'undefined' || !maskEditMode);
+    
+    if (allowZoom) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        zoomCanvas(delta);
+    }
 }
 
-// パン開始（中ボタンまたはスペース+ドラッグ）
+// パン開始（中ボタン、右ボタン、またはスペース+ドラッグ）
 function startCanvasPan(e) {
-    // 中ボタン、またはスペースキーが押されている場合
-    if (e.button === 1 || (e.button === 0 && isSpacePressed)) {
+    // 中ボタン、右ボタン、またはスペースキーが押されている場合
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && isSpacePressed)) {
         e.preventDefault();
         isPanning = true;
         panStartX = e.clientX - canvasPanX;
@@ -475,6 +494,11 @@ function setupCanvasZoomEvents() {
     // マウスホイール
     canvasArea.addEventListener('wheel', handleCanvasWheel, { passive: false });
     
+    // 右クリックメニュー無効化（右ボタンパン用）
+    canvasArea.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
+    
     // パン操作
     canvasArea.addEventListener('mousedown', startCanvasPan);
     document.addEventListener('mousemove', updateCanvasPan);
@@ -483,6 +507,7 @@ function setupCanvasZoomEvents() {
     // スペースキー
     document.addEventListener('keydown', (e) => {
         if (e.code === 'Space' && !e.target.matches('input, textarea')) {
+            e.preventDefault(); // ページスクロール防止
             isSpacePressed = true;
             const canvasArea = document.querySelector('.canvas-area');
             if (canvasArea) canvasArea.style.cursor = 'grab';
@@ -497,15 +522,7 @@ function setupCanvasZoomEvents() {
         }
     });
     
-    // ピンチズーム - 無効化（レイヤー操作と競合するため）
-    // プレビューのズームはボタン（➕➖）で行う
-    // let initialPinchDistance = 0;
-    // let initialZoom = 1;
-    
-    // canvasArea.addEventListener('touchstart', ...) - 削除
-    // canvasArea.addEventListener('touchmove', ...) - 削除
-    
-    console.log('🔍 キャンバスズーム機能を初期化しました（ボタン操作のみ）');
+    console.log('🔍 キャンバスズーム機能を初期化しました（ホイール・右ボタン対応）');
 }
 
 // 初期化時に呼び出し

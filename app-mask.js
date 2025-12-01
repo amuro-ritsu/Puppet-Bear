@@ -22,6 +22,10 @@ let maskDrawStart = { x: 0, y: 0 };
 // ベジェ編集サブモード
 let bezierEditSubMode = 'add'; // 'add' (頂点追加) or 'handle' (ハンドル操作)
 
+// 頂点・ハンドルの表示サイズ
+let maskVertexSize = 7;  // 頂点（青い●）のサイズ
+let maskHandleSize = 5;  // ハンドル（黄色い●）のサイズ
+
 // ===== ワールド座標をレイヤーローカル座標に変換 =====
 function worldToLayerLocal(worldX, worldY, layer) {
     // 親のトランスフォームを取得
@@ -655,7 +659,7 @@ function drawMaskEditOverlay(ctx) {
                 // ハンドル点
                 ctx.fillStyle = '#ffff00';
                 ctx.beginPath();
-                ctx.arc(handleIn.x, handleIn.y, 5, 0, Math.PI * 2);
+                ctx.arc(handleIn.x, handleIn.y, maskHandleSize, 0, Math.PI * 2);
                 ctx.fill();
             }
             
@@ -668,14 +672,14 @@ function drawMaskEditOverlay(ctx) {
                 // ハンドル点
                 ctx.fillStyle = '#ffff00';
                 ctx.beginPath();
-                ctx.arc(handleOut.x, handleOut.y, 5, 0, Math.PI * 2);
+                ctx.arc(handleOut.x, handleOut.y, maskHandleSize, 0, Math.PI * 2);
                 ctx.fill();
             }
             
             // 頂点
             ctx.fillStyle = index === maskDraggingPoint ? '#ff0000' : '#00ffff';
             ctx.beginPath();
-            ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+            ctx.arc(point.x, point.y, maskVertexSize, 0, Math.PI * 2);
             ctx.fill();
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
@@ -724,7 +728,7 @@ function updateMaskToolUI() {
     if (!toolbar) return;
     
     if (maskEditMode) {
-        toolbar.style.display = 'flex';
+        toolbar.style.display = 'block';
         
         if (maskEditMode === 'bezier') {
             // ベジェ編集時はサブモード切替ボタンを表示
@@ -732,25 +736,54 @@ function updateMaskToolUI() {
             const handleActive = bezierEditSubMode === 'handle' ? 'active' : '';
             
             toolbar.innerHTML = `
-                <span style="color: #00ffff;">🎭 ベジェマスク編集</span>
-                <button onclick="setBezierSubMode('add')" class="btn-small mask-mode-btn ${addActive}" title="頂点追加モード">➕ 追加</button>
-                <button onclick="setBezierSubMode('handle')" class="btn-small mask-mode-btn ${handleActive}" title="ハンドル操作モード">✋ 操作</button>
-                <span style="color: #888; margin: 0 5px;">|</span>
-                <button onclick="deleteLastMaskPoint()" class="btn-small" title="最後の頂点を削除">🗑️ 頂点削除</button>
-                <span style="color: #888; margin: 0 5px;">|</span>
-                <button onclick="endMaskEdit(true)" class="btn-small btn-confirm">✓ 確定</button>
-                <button onclick="endMaskEdit(false)" class="btn-small">✕ キャンセル</button>
+                <div class="mask-toolbar-row">
+                    <span style="color: #00ffff;">🎭 ベジェマスク編集</span>
+                    <button onclick="setBezierSubMode('add')" class="btn-small mask-mode-btn ${addActive}" title="頂点追加モード">➕ 追加</button>
+                    <button onclick="setBezierSubMode('handle')" class="btn-small mask-mode-btn ${handleActive}" title="ハンドル操作モード">✋ 操作</button>
+                    <span style="color: #888; margin: 0 5px;">|</span>
+                    <button onclick="deleteLastMaskPoint()" class="btn-small" title="最後の頂点を削除">🗑️ 頂点削除</button>
+                    <span style="color: #888; margin: 0 5px;">|</span>
+                    <button onclick="endMaskEdit(true)" class="btn-small btn-confirm">✓ 確定</button>
+                    <button onclick="endMaskEdit(false)" class="btn-small">✕ キャンセル</button>
+                </div>
+                <div class="mask-toolbar-row mask-size-controls">
+                    <label>🔵 頂点</label>
+                    <input type="range" min="3" max="20" value="${maskVertexSize}" 
+                           oninput="setMaskVertexSize(this.value)" class="mask-size-slider">
+                    <span id="mask-vertex-size-label">${maskVertexSize}</span>
+                    <span style="color: #888; margin: 0 8px;">|</span>
+                    <label>🟡 ハンドル</label>
+                    <input type="range" min="2" max="15" value="${maskHandleSize}" 
+                           oninput="setMaskHandleSize(this.value)" class="mask-size-slider">
+                    <span id="mask-handle-size-label">${maskHandleSize}</span>
+                </div>
             `;
         } else {
             toolbar.innerHTML = `
-                <span style="color: #00ffff;">🎭 マスク編集中: ${maskEditMode}</span>
-                <button onclick="endMaskEdit(true)" class="btn-small btn-confirm">✓ 確定</button>
-                <button onclick="endMaskEdit(false)" class="btn-small">✕ キャンセル</button>
+                <div class="mask-toolbar-row">
+                    <span style="color: #00ffff;">🎭 マスク編集中: ${maskEditMode}</span>
+                    <button onclick="endMaskEdit(true)" class="btn-small btn-confirm">✓ 確定</button>
+                    <button onclick="endMaskEdit(false)" class="btn-small">✕ キャンセル</button>
+                </div>
             `;
         }
     } else {
         toolbar.style.display = 'none';
     }
+}
+
+// ===== 頂点サイズ変更 =====
+function setMaskVertexSize(size) {
+    maskVertexSize = parseInt(size);
+    document.getElementById('mask-vertex-size-label').textContent = size;
+    render();
+}
+
+// ===== ハンドルサイズ変更 =====
+function setMaskHandleSize(size) {
+    maskHandleSize = parseInt(size);
+    document.getElementById('mask-handle-size-label').textContent = size;
+    render();
 }
 
 // ===== ベジェ編集サブモード切替 =====
