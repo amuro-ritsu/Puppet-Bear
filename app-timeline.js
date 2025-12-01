@@ -100,22 +100,6 @@ function initTimeline() {
     // キーボードイベント（Deleteキー）
     document.addEventListener('keydown', handleKeyframeDelete);
     
-    // タイムラインスクロール同期（縦横両方）
-    const timeline = document.getElementById('timeline');
-    const timelineLayers = document.getElementById('timeline-layers');
-    if (timeline && timelineLayers) {
-        timeline.addEventListener('scroll', () => {
-            timelineLayers.scrollTop = timeline.scrollTop;
-            timelineLayers.scrollLeft = timeline.scrollLeft;
-        });
-        
-        // 左側からのスクロールも同期
-        timelineLayers.addEventListener('scroll', () => {
-            timeline.scrollTop = timelineLayers.scrollTop;
-            timeline.scrollLeft = timelineLayers.scrollLeft;
-        });
-    }
-    
     updateTimeline();
 }
 
@@ -181,10 +165,12 @@ function updateTimeline() {
         trackY = renderTimelineLayer(rootLayers[i], trackY, 0);
     }
     
-    // タイムラインの高さを調整（コンテナの高さまたはトラック高さの大きい方）
+    // タイムラインの高さを調整（左右両方に同じ高さを設定）
     const timelineBody = document.querySelector('.timeline-body');
     const containerHeight = timelineBody ? timelineBody.offsetHeight : 300;
-    timelineContent.style.height = Math.max(containerHeight, trackY) + 'px';
+    const finalHeight = Math.max(containerHeight, trackY);
+    timelineContent.style.height = finalHeight + 'px';
+    timelineLayers.style.minHeight = finalHeight + 'px';
     
     // 再生ヘッドの位置を更新
     updatePlayhead();

@@ -1043,45 +1043,63 @@ body {
 
 .timeline-body {
     flex: 1;
-    display: flex;
-    overflow: hidden;
-}
-
-.timeline-left {
-    width: 250px;
-    background: var(--chocolate-dark);
-    border-right: 2px solid var(--border-color);
-    overflow-y: auto;
+    overflow-y: auto;  /* 縦スクロールはここだけ */
     overflow-x: hidden;
 }
 
-.timeline-right {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
+/* 左右を横並びにするコンテナ（各行ごと） */
+.timeline-rows-container {
+    display: flex;
+    min-height: 100%;
+}
+
+.timeline-layers {
+    width: 250px;
+    min-width: 250px;
+    background: var(--chocolate-dark);
+    border-right: 2px solid var(--border-color);
+    flex-shrink: 0;
 }
 
 .timeline {
-    width: 100%;
-    height: 100%;
+    flex: 1;
     position: relative;
-    overflow-x: auto;
-    overflow-y: auto;
+    overflow-x: auto;  /* 横スクロールだけ */
+    overflow-y: hidden;
     background: var(--bg-dark);
 }
 
 /* タブレット向けタイムラインスクロールバー */
 @media (pointer: coarse) {
-    .timeline {
-        /* スクロールバーを常に表示 */
+    .timeline-body {
+        /* 縦スクロールバーを常に表示 */
         scrollbar-width: auto;
         scrollbar-color: var(--accent-gold) var(--chocolate-dark);
-        /* 下部に余白を確保してAndroidナビと重ならないように */
-        padding-bottom: 20px;
+    }
+    
+    .timeline-body::-webkit-scrollbar {
+        width: 14px;
+    }
+    
+    .timeline-body::-webkit-scrollbar-track {
+        background: var(--chocolate-dark);
+        border-radius: 6px;
+    }
+    
+    .timeline-body::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, var(--accent-gold), var(--biscuit-medium));
+        border-radius: 8px;
+        border: 3px solid var(--chocolate-dark);
+        min-height: 50px;
+    }
+    
+    .timeline {
+        /* 横スクロールバーを常に表示 */
+        scrollbar-width: auto;
+        scrollbar-color: var(--accent-gold) var(--chocolate-dark);
     }
     
     .timeline::-webkit-scrollbar {
-        width: 14px;
         height: 18px;
     }
     
@@ -1094,7 +1112,6 @@ body {
         background: linear-gradient(135deg, var(--accent-gold), var(--biscuit-medium));
         border-radius: 8px;
         border: 3px solid var(--chocolate-dark);
-        min-height: 50px;
         min-width: 50px;
     }
     
@@ -1102,25 +1119,11 @@ body {
     .timeline::-webkit-scrollbar-thumb:active {
         background: linear-gradient(135deg, var(--biscuit-light), var(--accent-gold));
     }
-    
-    .timeline::-webkit-scrollbar-corner {
-        background: var(--chocolate-dark);
-    }
-    
-    /* タイムラインコンテナの下余白 */
-    .timeline-container {
-        padding-bottom: 10px;
-    }
 }
 
 .timeline-content {
     position: relative;
-    height: 100%;
     min-width: 3000px;
-}
-
-.timeline-layers {
-    position: relative;
 }
 
 /* ===== 再生ヘッド（クマさん） ===== */
@@ -1643,8 +1646,9 @@ canvas.eyedropper-active {
         height: 150px;
     }
     
-    .timeline-left {
+    .timeline-layers {
         width: 150px;
+        min-width: 150px;
     }
     
     .header-toolbar {
