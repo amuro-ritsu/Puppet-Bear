@@ -156,6 +156,11 @@ function serializeLayer(layer) {
         serialized.colorClipping = JSON.parse(JSON.stringify(layer.colorClipping));
     }
     
+    // マスク
+    if (layer.mask) {
+        serialized.mask = JSON.parse(JSON.stringify(layer.mask));
+    }
+    
     return serialized;
 }
 

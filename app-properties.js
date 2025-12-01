@@ -684,6 +684,8 @@ function updatePropertiesPanel() {
         
         ${generateColorClippingUI(layer)}
         
+        ${typeof generateMaskUI === 'function' ? generateMaskUI(layer) : ''}
+        
         ${generateWindSwayUI(layer)}
         
         ${typeof generateWiggleUI === 'function' ? generateWiggleUI(layer) : ''}

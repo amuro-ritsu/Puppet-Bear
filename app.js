@@ -204,6 +204,13 @@ function setupEventListeners() {
         }
     });
     
+    // ダブルクリック（マスク編集終了用）
+    canvas.addEventListener('dblclick', (e) => {
+        if (typeof maskEditMode !== 'undefined' && maskEditMode && typeof handleMaskDoubleClick === 'function') {
+            handleMaskDoubleClick(e);
+        }
+    });
+    
     // タッチイベント（パペットハンドル等のドラッグ用）
     document.addEventListener('touchmove', (e) => {
         if (typeof handlePuppetDrag === 'function' && typeof isDraggingPuppetHandle !== 'undefined' && isDraggingPuppetHandle) {

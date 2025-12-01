@@ -319,6 +319,13 @@ function render() {
                     width: layer.width, height: layer.height
                 });
             }
+            
+            // マスクを適用
+            let maskApplied = false;
+            if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
+                maskApplied = applyMaskToContext(targetCtx, layer, -anchorOffsetX, -anchorOffsetY);
+            }
+            
             targetCtx.drawImage(
                 layer.img,
                 -anchorOffsetX,
@@ -326,6 +333,11 @@ function render() {
                 layer.width,
                 layer.height
             );
+            
+            // マスクを解除
+            if (maskApplied && typeof restoreFromMask === 'function') {
+                restoreFromMask(targetCtx);
+            }
         }
         
         // アンカーポイントは最前面で一括描画するため、ここでは描画しない
@@ -372,6 +384,11 @@ function render() {
     // ★★★ 選択中レイヤーのアンカーポイントを最前面に描画 ★★★
     if (typeof isExporting === 'undefined' || !isExporting) {
         drawSelectedLayerAnchors(localTime);
+    }
+    
+    // マスク編集中のオーバーレイを描画
+    if (typeof maskEditMode !== 'undefined' && maskEditMode && typeof drawMaskEditOverlay === 'function') {
+        drawMaskEditOverlay(ctx);
     }
     
     // 回転ハンドルは不要（ドラッグで回転できるため削除）

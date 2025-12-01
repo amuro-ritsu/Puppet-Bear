@@ -91,6 +91,11 @@ function updateCanvasCursor() {
 
 // ===== キャンバスマウスイベント =====
 function handleCanvasMouseDown(e) {
+    // マスク編集モードが最優先
+    if (typeof maskEditMode !== 'undefined' && maskEditMode && typeof handleMaskMouseDown === 'function') {
+        if (handleMaskMouseDown(e)) return;
+    }
+    
     // アンカーポイント設定モードが優先
     if (anchorPointPickMode) return;
     
@@ -125,6 +130,11 @@ function handleCanvasMouseDown(e) {
 }
 
 function handleCanvasMouseMove(e) {
+    // マスク編集モード
+    if (typeof maskEditMode !== 'undefined' && maskEditMode && typeof handleMaskMouseMove === 'function') {
+        if (handleMaskMouseMove(e)) return;
+    }
+    
     if (!isDragging || selectedLayerIds.length !== 1) return;
     
     const layer = layers.find(l => l.id === selectedLayerIds[0]);
@@ -172,6 +182,11 @@ function handleCanvasMouseMove(e) {
 }
 
 function handleCanvasMouseUp(e) {
+    // マスク編集モード
+    if (typeof maskEditMode !== 'undefined' && maskEditMode && typeof handleMaskMouseUp === 'function') {
+        if (handleMaskMouseUp(e)) return;
+    }
+    
     if (isDragging) {
         isDragging = false;
         updateCanvasCursor();
