@@ -168,7 +168,7 @@ function updateLayerList() {
     layerTypeSelect.id = 'layer-type-select';
     layerTypeSelect.style.cssText = 'flex: 1; padding: 8px; background: var(--biscuit-dark); color: var(--chocolate-dark); border: 2px solid var(--border-color); border-radius: 6px; font-weight: bold; cursor: pointer;';
     layerTypeSelect.innerHTML = `
-        <option value="image">📷 画像/ZIP</option>
+        <option value="image">📷 画像/ZIP/PSD</option>
         <option value="lipsync">💬 口パク</option>
         <option value="blink">👀 まばたき</option>
         <option value="sequence">🎞️ 連番アニメ</option>
@@ -259,7 +259,7 @@ function deselectAllLayers() {
     updatePropertiesPanel();
 }
 
-// ===== 画像ファイル入力処理（ZIP/複数ファイル対応） =====
+// ===== 画像ファイル入力処理（ZIP/PSD/複数ファイル対応） =====
 async function handleImageFilesInput(files) {
     if (!files || files.length === 0) return;
     
@@ -275,9 +275,9 @@ async function handleImageFilesInput(files) {
         await loadImagesFromZip(zipFile);
     }
     
-    // PSDファイルを処理（簡易対応）
+    // PSDファイルを処理
     for (const psdFile of psdFiles) {
-        alert('PSDファイルは現在サポートされていません。PNGまたはZIPに変換してお使いください。');
+        await loadImagesFromPSD(psdFile);
     }
     
     // 通常の画像ファイルを処理
@@ -288,6 +288,138 @@ async function handleImageFilesInput(files) {
             await loadImageWithOriginalName(file);
         }
     }
+}
+
+// ===== PSDから画像を一括読み込み（ag-psd使用） =====
+async function loadImagesFromPSD(psdFile) {
+    // ag-psdがグローバルに読み込まれているか確認
+    if (typeof agPsd === 'undefined') {
+        alert('ag-psdライブラリが読み込まれていません。');
+        return;
+    }
+    
+    try {
+        console.log('📂 PSDファイル読み込み開始:', psdFile.name);
+        
+        // ArrayBufferとして読み込み
+        const arrayBuffer = await psdFile.arrayBuffer();
+        
+        // ag-psdでPSDを読み込み
+        const psd = agPsd.readPsd(new Uint8Array(arrayBuffer), {
+            skipThumbnail: true
+        });
+        
+        // PSD情報をログ
+        console.log('📐 PSDサイズ:', psd.width, 'x', psd.height);
+        console.log('📑 レイヤー数:', psd.children ? psd.children.length : 0);
+        
+        // レイヤー情報を収集（再帰的に処理）
+        const layerInfos = [];
+        
+        function collectLayers(children, depth = 0) {
+            if (!children) return;
+            
+            for (const child of children) {
+                // グループ（フォルダ）の場合は子を再帰処理
+                if (child.children) {
+                    console.log('📁 グループ:', child.name);
+                    collectLayers(child.children, depth + 1);
+                    continue;
+                }
+                
+                // canvasがあるレイヤーのみ処理
+                if (child.canvas) {
+                    layerInfos.push({
+                        name: child.name || 'Layer',
+                        canvas: child.canvas,
+                        left: child.left || 0,
+                        top: child.top || 0,
+                        width: child.canvas.width,
+                        height: child.canvas.height,
+                        opacity: child.opacity !== undefined ? child.opacity : 1,
+                        hidden: child.hidden || false
+                    });
+                    
+                    console.log('✅ レイヤー取得:', child.name, 
+                        `(${child.canvas.width}x${child.canvas.height})`,
+                        `位置: (${child.left}, ${child.top})`,
+                        child.hidden ? '(非表示)' : '');
+                } else {
+                    console.log('⏭️ 空レイヤーをスキップ:', child.name);
+                }
+            }
+        }
+        
+        collectLayers(psd.children);
+        
+        if (layerInfos.length === 0) {
+            alert('PSDから読み込める画像レイヤーが見つかりませんでした。\n\nヒント: Photoshopで「ファイル互換性を優先」オプションを有効にして保存してください。');
+            return;
+        }
+        
+        // PSDの順序を逆にして追加（下のレイヤーが先に格納されているので）
+        for (let i = layerInfos.length - 1; i >= 0; i--) {
+            const info = layerInfos[i];
+            
+            // CanvasをDataURLに変換
+            const dataUrl = info.canvas.toDataURL('image/png');
+            
+            // レイヤーとして追加（位置情報も保持）
+            await loadImageFromDataURLWithPosition(
+                dataUrl, 
+                info.name, 
+                info.left, 
+                info.top, 
+                info.opacity,
+                !info.hidden  // visible
+            );
+        }
+        
+        console.log(`✅ PSDから ${layerInfos.length} 枚のレイヤーを読み込みました`);
+        
+    } catch (error) {
+        console.error('❌ PSD読み込みエラー:', error);
+        alert('PSDファイルの読み込みに失敗しました: ' + error.message + '\n\nヒント: Photoshopで「ファイル互換性を優先」オプションを有効にして保存し直してください。');
+    }
+}
+
+// ===== DataURLから画像読み込み（位置情報付き） =====
+async function loadImageFromDataURLWithPosition(dataUrl, name, x = 0, y = 0, opacity = 1, visible = true) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const layer = {
+                id: Date.now() + Math.random(),
+                name: name.replace(/\.[^/.]+$/, ''),
+                type: 'image',
+                img: img,
+                x: x,
+                y: y,
+                width: img.width,
+                height: img.height,
+                rotation: 0,
+                scale: 1,
+                opacity: opacity,
+                anchorX: 0.5,
+                anchorY: 0.5,
+                visible: visible,
+                blendMode: 'source-over',
+                keyframes: []
+            };
+            
+            layers.unshift(layer);
+            selectedLayer = layer;
+            updateLayerList();
+            updateTimeline();
+            render();
+            resolve(layer);
+        };
+        img.onerror = () => {
+            console.error('画像の読み込みに失敗:', name);
+            resolve(null);
+        };
+        img.src = dataUrl;
+    });
 }
 
 // ===== ZIPから画像を一括読み込み =====
