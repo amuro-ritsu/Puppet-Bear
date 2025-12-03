@@ -309,8 +309,15 @@ async function loadImagesFromPSD(psdFile) {
             skipThumbnail: true
         });
         
+        // PSDキャンバスサイズ
+        const psdWidth = psd.width;
+        const psdHeight = psd.height;
+        const psdCenterX = psdWidth / 2;
+        const psdCenterY = psdHeight / 2;
+        
         // PSD情報をログ
-        console.log('📐 PSDサイズ:', psd.width, 'x', psd.height);
+        console.log('📐 PSDサイズ:', psdWidth, 'x', psdHeight);
+        console.log('📍 PSD中心:', psdCenterX, ',', psdCenterY);
         console.log('📑 レイヤー数:', psd.children ? psd.children.length : 0);
         
         // レイヤー情報を収集（再帰的に処理）
@@ -329,11 +336,19 @@ async function loadImagesFromPSD(psdFile) {
                 
                 // canvasがあるレイヤーのみ処理
                 if (child.canvas) {
+                    // レイヤーの中心座標（PSD座標系）
+                    const layerCenterX = (child.left || 0) + child.canvas.width / 2;
+                    const layerCenterY = (child.top || 0) + child.canvas.height / 2;
+                    
+                    // PSD中心からの相対座標（Puppet Bear座標系）
+                    const relativeX = layerCenterX - psdCenterX;
+                    const relativeY = layerCenterY - psdCenterY;
+                    
                     layerInfos.push({
                         name: child.name || 'Layer',
                         canvas: child.canvas,
-                        left: child.left || 0,
-                        top: child.top || 0,
+                        x: relativeX,  // PSD中心基準の座標
+                        y: relativeY,
                         width: child.canvas.width,
                         height: child.canvas.height,
                         opacity: child.opacity !== undefined ? child.opacity : 1,
@@ -342,7 +357,8 @@ async function loadImagesFromPSD(psdFile) {
                     
                     console.log('✅ レイヤー取得:', child.name, 
                         `(${child.canvas.width}x${child.canvas.height})`,
-                        `位置: (${child.left}, ${child.top})`,
+                        `PSD位置: (${child.left}, ${child.top})`,
+                        `→ 相対位置: (${relativeX.toFixed(1)}, ${relativeY.toFixed(1)})`,
                         child.hidden ? '(非表示)' : '');
                 } else {
                     console.log('⏭️ 空レイヤーをスキップ:', child.name);
@@ -364,12 +380,12 @@ async function loadImagesFromPSD(psdFile) {
             // CanvasをDataURLに変換
             const dataUrl = info.canvas.toDataURL('image/png');
             
-            // レイヤーとして追加（位置情報も保持）
+            // レイヤーとして追加（PSD中心基準の座標）
             await loadImageFromDataURLWithPosition(
                 dataUrl, 
                 info.name, 
-                info.left, 
-                info.top, 
+                info.x,   // 既にPSD中心基準
+                info.y, 
                 info.opacity,
                 !info.hidden  // visible
             );
@@ -383,18 +399,23 @@ async function loadImagesFromPSD(psdFile) {
     }
 }
 
-// ===== DataURLから画像読み込み（位置情報付き） =====
+// ===== DataURLから画像読み込み（位置情報付き・PSD用） =====
 async function loadImageFromDataURLWithPosition(dataUrl, name, x = 0, y = 0, opacity = 1, visible = true) {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
+            // 座標はPSD中心基準で既に計算済み
+            // Puppet Bearのキャンバス中心を基準に配置
+            const canvasCenterX = canvas.width / 2;
+            const canvasCenterY = canvas.height / 2;
+            
             const layer = {
                 id: Date.now() + Math.random(),
                 name: name.replace(/\.[^/.]+$/, ''),
                 type: 'image',
                 img: img,
-                x: x,
-                y: y,
+                x: canvasCenterX + x,  // キャンバス中心 + PSD中心からの相対位置
+                y: canvasCenterY + y,
                 width: img.width,
                 height: img.height,
                 rotation: 0,
