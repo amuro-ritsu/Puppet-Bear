@@ -954,8 +954,53 @@ function loadScript(src) {
     });
 }
 
-// Blobをダウンロード
-function downloadBlob(blob, fileName) {
+// Blobをダウンロード（保存場所選択対応）
+async function downloadBlob(blob, fileName) {
+    // ファイル保存ダイアログを表示（対応ブラウザの場合）
+    if ('showSaveFilePicker' in window) {
+        try {
+            // 拡張子からMIMEタイプを判定
+            const ext = fileName.split('.').pop().toLowerCase();
+            let mimeType = 'application/octet-stream';
+            let description = 'File';
+            
+            if (ext === 'webm') {
+                mimeType = 'video/webm';
+                description = 'WebM Video';
+            } else if (ext === 'png') {
+                mimeType = 'image/png';
+                description = 'PNG Image';
+            } else if (ext === 'zip') {
+                mimeType = 'application/zip';
+                description = 'ZIP Archive';
+            }
+            
+            const handle = await window.showSaveFilePicker({
+                suggestedName: fileName,
+                types: [{
+                    description: description,
+                    accept: { [mimeType]: ['.' + ext] }
+                }]
+            });
+            
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            
+            console.log('✅ ファイルを保存しました:', handle.name);
+            return;
+        } catch (err) {
+            // ユーザーがキャンセルした場合
+            if (err.name === 'AbortError') {
+                console.log('💾 保存がキャンセルされました');
+                return;
+            }
+            // その他のエラーはフォールバック処理へ
+            console.warn('showSaveFilePicker failed, falling back:', err);
+        }
+    }
+    
+    // フォールバック: 従来のダウンロード方式
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

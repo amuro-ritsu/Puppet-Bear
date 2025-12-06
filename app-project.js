@@ -204,6 +204,17 @@ async function loadProject(file) {
             // FPSボタンの表示を更新
             document.getElementById('fps-24').classList.toggle('active', projectFPS === 24);
             document.getElementById('fps-30').classList.toggle('active', projectFPS === 30);
+            
+            // キャンバスサイズUIを更新
+            if (typeof updateCanvasSizeUI === 'function') {
+                updateCanvasSizeUI();
+            } else {
+                // フォールバック: 直接更新
+                const widthInput = document.getElementById('canvas-width-input');
+                const heightInput = document.getElementById('canvas-height-input');
+                if (widthInput) widthInput.value = canvas.width;
+                if (heightInput) heightInput.value = canvas.height;
+            }
         }
         
         nextLayerId = projectData.nextLayerId || 1;
