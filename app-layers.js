@@ -122,6 +122,7 @@ function updateLayerList() {
             <option value="blink" ${layerFilterType === 'blink' ? 'selected' : ''}>👀 まばたき</option>
             <option value="sequence" ${layerFilterType === 'sequence' ? 'selected' : ''}>🎞️ 連番アニメ</option>
             <option value="bounce" ${layerFilterType === 'bounce' ? 'selected' : ''}>🎈 弾みレイヤー</option>
+            <option value="bone" ${layerFilterType === 'bone' ? 'selected' : ''}>🦴 ボーン</option>
             <option value="puppet" ${layerFilterType === 'puppet' ? 'selected' : ''}>🎭 パペット</option>
             <option value="audio" ${layerFilterType === 'audio' ? 'selected' : ''}>🎵 音声</option>
         </select>
@@ -174,6 +175,7 @@ function updateLayerList() {
         <option value="sequence">🎞️ 連番アニメ</option>
         <option value="crosssection">🔞 断面図</option>
         <option value="bounce">🎈 弾みレイヤー</option>
+        <option value="bone">🦴 ボーン</option>
         <option value="puppet">🎭 パペット</option>
         <option value="audio">🎵 音声</option>
     `;
@@ -207,6 +209,9 @@ function updateLayerList() {
                 break;
             case 'bounce':
                 createBounceLayer();
+                break;
+            case 'bone':
+                createBoneLayer();
                 break;
             case 'puppet':
                 createPuppetLayer();
@@ -425,7 +430,34 @@ async function loadImageFromDataURLWithPosition(dataUrl, name, x = 0, y = 0, opa
                 anchorY: 0.5,
                 visible: visible,
                 blendMode: 'source-over',
-                keyframes: []
+                keyframes: [],
+                
+                // 風揺れ機能（デフォルト無効）
+                windSwayEnabled: false,
+                windSwayParams: typeof getDefaultWindSwayParams === 'function' ? getDefaultWindSwayParams() : {
+                    divisions: 30,
+                    angle: 0,
+                    period: 3,
+                    phaseShift: 0.3,
+                    center: 0.5,
+                    topFixed: 0,
+                    bottomFixed: 0.3,
+                    randomPattern: 0,
+                    seed: 0,
+                    fromBottom: false,
+                    randomSwing: false,
+                    loop: false,
+                    frequency: 1,
+                    dampingTime: null
+                },
+                
+                // Wiggle機能（デフォルト無効）
+                wiggleEnabled: false,
+                wiggleParams: typeof getDefaultWiggleParams === 'function' ? getDefaultWiggleParams() : {
+                    amplitude: 5,
+                    frequency: 3,
+                    seed: 0
+                }
             };
             
             layers.unshift(layer);
@@ -751,8 +783,8 @@ function renderLayerItem(layer, depth) {
                 <span class="layer-name">${windIcon}${walkIcon}${jumpIcon}${parentIndicator}${typeIcon} ${layer.name}</span>
             </div>
             <div class="layer-row-bottom">
-                <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
-                <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
+                <button class="layer-move-btn" onclick="event.stopPropagation(); event.preventDefault(); moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
+                <button class="layer-move-btn" onclick="event.stopPropagation(); event.preventDefault(); moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
                 <button class="layer-visibility-btn" onclick="toggleLayerVisibility(${layer.id}, event)" title="表示切替">
                     <img src="${layer.visible !== false ? 'bear-eye-open.png' : 'bear-eye-close.png'}" alt="visibility">
                 </button>
@@ -798,8 +830,8 @@ function renderLayerItem(layer, depth) {
                 <span class="layer-name">${typeIcon} ${layer.name} <span style="font-size: 10px; color: #1db954;">(${clipCount}クリップ)</span></span>
             </div>
             <div class="layer-row-bottom">
-                <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
-                <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
+                <button class="layer-move-btn" onclick="event.stopPropagation(); event.preventDefault(); moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
+                <button class="layer-move-btn" onclick="event.stopPropagation(); event.preventDefault(); moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
                 <button class="layer-visibility-btn" onclick="toggleLayerVisibility(${layer.id}, event)" title="表示切替">
                     <img src="${layer.visible !== false ? 'bear-eye-open.png' : 'bear-eye-close.png'}" alt="visibility">
                 </button>
@@ -827,8 +859,8 @@ function renderLayerItem(layer, depth) {
                 <span class="layer-name">${windIcon}${childIndicator}${parentIndicator}${typeIcon} ${layer.name}</span>
             </div>
             <div class="layer-row-bottom">
-                <button class="layer-move-btn" onclick="moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
-                <button class="layer-move-btn" onclick="moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
+                <button class="layer-move-btn" onclick="event.stopPropagation(); event.preventDefault(); moveLayerUp(${layer.id}, event)" title="上に移動">⬆</button>
+                <button class="layer-move-btn" onclick="event.stopPropagation(); event.preventDefault(); moveLayerDown(${layer.id}, event)" title="下に移動">⬇</button>
                 <button class="layer-visibility-btn" onclick="toggleLayerVisibility(${layer.id}, event)" title="表示切替">
                     <img src="${layer.visible !== false ? 'bear-eye-open.png' : 'bear-eye-close.png'}" alt="visibility">
                 </button>
@@ -857,13 +889,13 @@ function renderLayerItem(layer, depth) {
 function getLayerTypeIcon(type) {
     switch (type) {
         case 'folder': return '📁';
-        case 'folder': return '📁';
         case 'lipsync': return '💬';
         case 'blink': return '👀';
         case 'sequence': return '🎞️';
         case 'crosssection': return '🔞';
         case 'puppet': return '🎭';
         case 'bounce': return '🎈';
+        case 'bone': return '🦴';
         case 'audio': return '🎵';
         case 'image':
         default: return '🖼️';
@@ -1787,14 +1819,24 @@ function createBounceLayer() {
 
 // ===== レイヤーを上に移動（表示順で前面に） =====
 function moveLayerUp(layerId, event) {
+    console.log('⬆️ moveLayerUp呼び出し layerId:', layerId);
     if (event) event.stopPropagation();
     
     const layer = layers.find(l => l.id === layerId);
-    if (!layer) return;
+    if (!layer) {
+        console.log('⬆️ レイヤーが見つかりません');
+        return;
+    }
+    console.log('⬆️ 対象レイヤー:', layer.name, 'type:', layer.type);
     
-    // 同じ親を持つレイヤー内での順序を変更
-    const siblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
+    // 同じ親を持つレイヤー内での順序を変更（フィルターを考慮）
+    const allSiblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
+    // フィルターがある場合は表示されているレイヤーのみを対象に
+    const siblings = layerFilterType || layerFilterText 
+        ? allSiblings.filter(l => layerMatchesFilter(l))
+        : allSiblings;
     const currentIndex = siblings.indexOf(layer);
+    console.log('⬆️ 兄弟数:', siblings.length, '現在インデックス:', currentIndex, 'フィルター:', layerFilterType || 'なし');
     
     // 既に兄弟内で最上位の場合
     if (currentIndex >= siblings.length - 1) {
@@ -1823,8 +1865,9 @@ function moveLayerUp(layerId, event) {
             }
         }
     } else {
-        // 上のレイヤーがフォルダの場合、そのフォルダの中に入る
+        // 上のレイヤー（表示順で次）を取得
         const targetLayer = siblings[currentIndex + 1];
+        
         if (targetLayer.type === 'folder') {
             // 位置補正: 見た目の位置が変わらないように調整（静的座標を使用）
             if (typeof getStaticParentTransform === 'function') {
@@ -1855,7 +1898,7 @@ function moveLayerUp(layerId, event) {
                 layers.splice(targetGlobalIndex + 1, 0, layer);
             }
         } else {
-            // 通常の入れ替え
+            // 通常の入れ替え（実際のlayers配列での位置で入れ替え）
             const globalIndex = layers.indexOf(layer);
             const targetGlobalIndex = layers.indexOf(targetLayer);
             
@@ -1874,14 +1917,24 @@ function moveLayerUp(layerId, event) {
 
 // ===== レイヤーを下に移動（表示順で背面に） =====
 function moveLayerDown(layerId, event) {
+    console.log('⬇️ moveLayerDown呼び出し layerId:', layerId);
     if (event) event.stopPropagation();
     
     const layer = layers.find(l => l.id === layerId);
-    if (!layer) return;
+    if (!layer) {
+        console.log('⬇️ レイヤーが見つかりません');
+        return;
+    }
+    console.log('⬇️ 対象レイヤー:', layer.name, 'type:', layer.type);
     
-    // 同じ親を持つレイヤー内での順序を変更
-    const siblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
+    // 同じ親を持つレイヤー内での順序を変更（フィルターを考慮）
+    const allSiblings = layers.filter(l => l.parentLayerId === layer.parentLayerId);
+    // フィルターがある場合は表示されているレイヤーのみを対象に
+    const siblings = layerFilterType || layerFilterText 
+        ? allSiblings.filter(l => layerMatchesFilter(l))
+        : allSiblings;
     const currentIndex = siblings.indexOf(layer);
+    console.log('⬇️ 兄弟数:', siblings.length, '現在インデックス:', currentIndex, 'フィルター:', layerFilterType || 'なし');
     
     // 既に兄弟内で最下位の場合
     if (currentIndex <= 0) {
@@ -1912,8 +1965,9 @@ function moveLayerDown(layerId, event) {
             }
         }
     } else {
-        // 下のレイヤーがフォルダの場合、そのフォルダの中に入る
+        // 下のレイヤー（表示順で前）を取得
         const targetLayer = siblings[currentIndex - 1];
+        
         if (targetLayer.type === 'folder') {
             // 位置補正: 見た目の位置が変わらないように調整（静的座標を使用）
             if (typeof getStaticParentTransform === 'function') {
@@ -1936,7 +1990,7 @@ function moveLayerDown(layerId, event) {
             const targetGlobalIndex = layers.indexOf(targetLayer);
             layers.splice(targetGlobalIndex + 1, 0, layer);
         } else {
-            // 通常の入れ替え
+            // 通常の入れ替え（実際のlayers配列での位置で入れ替え）
             const globalIndex = layers.indexOf(layer);
             const targetGlobalIndex = layers.indexOf(targetLayer);
             
@@ -1963,4 +2017,108 @@ function getDefaultJumpParams() {
         loopPeriod: 1.0,    // ループ周期（秒）
         keyframes: []       // アニメーションキーフレーム { frame: number }
     };
+}
+
+// ===== ボーンレイヤー作成 =====
+function createBoneLayer() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const layer = {
+                    id: nextLayerId++,
+                    type: 'bone',
+                    name: 'ボーンレイヤー',
+                    img: img,
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    width: img.width,
+                    height: img.height,
+                    rotation: 0,
+                    scale: 1,
+                    opacity: 1.0,
+                    anchorX: 0.5,
+                    anchorY: 0.5,
+                    visible: true,
+                    blendMode: 'source-over',
+                    
+                    // 親子関係
+                    parentLayerId: null,
+                    
+                    // ボーン機能
+                    boneParams: typeof getDefaultBoneParams === 'function' ? getDefaultBoneParams() : {
+                        bones: [],
+                        divisions: 30,
+                        influenceRadius: 0.3,
+                        boneKeyframes: []
+                    },
+                    
+                    // 風揺れ機能（デフォルト無効）
+                    windSwayEnabled: false,
+                    windSwayParams: typeof getDefaultWindSwayParams === 'function' ? getDefaultWindSwayParams() : {
+                        divisions: 30,
+                        angle: 0,
+                        period: 3,
+                        phaseShift: 0.3,
+                        center: 0.5,
+                        topFixed: 0,
+                        bottomFixed: 0.3,
+                        randomPattern: 0,
+                        seed: 0,
+                        fromBottom: false,
+                        randomSwing: false,
+                        loop: false,
+                        frequency: 1,
+                        dampingTime: null
+                    },
+                    
+                    // Wiggle機能（デフォルト無効）
+                    wiggleEnabled: false,
+                    wiggleParams: typeof getDefaultWiggleParams === 'function' ? getDefaultWiggleParams() : {
+                        amplitude: 5,
+                        frequency: 3,
+                        seed: 0
+                    },
+                    
+                    // デフォルトキーフレーム
+                    keyframes: [{
+                        frame: 0,
+                        x: canvas.width / 2,
+                        y: canvas.height / 2,
+                        rotation: 0,
+                        scale: 1,
+                        opacity: 1.0
+                    }]
+                };
+                
+                layers.push(layer);
+                updateLayerList();
+                selectLayer(layer.id, false);
+                
+                // 初期キーフレームを適用
+                if (typeof applyKeyframeInterpolation === 'function') {
+                    applyKeyframeInterpolation();
+                }
+                
+                render();
+                
+                // 履歴を保存
+                if (typeof saveHistory === 'function') {
+                    saveHistory();
+                }
+                
+                console.log('🦴 ボーンレイヤーを作成しました:', layer.name);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
 }

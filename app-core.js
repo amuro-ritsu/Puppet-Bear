@@ -619,23 +619,37 @@ function getLayerAnchorWorldPosition(layer, localTime) {
 function drawLipSyncLayer(layer, time) {
     if (!layer.sequenceImages || layer.sequenceImages.length === 0) return;
     
-    ctx.save();
+    // 色抜きクリッピングが有効な場合は一時キャンバスを使用
+    const useClipping = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
+    
+    let tempCanvas, tempCtx;
+    if (useClipping) {
+        tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        tempCtx = tempCanvas.getContext('2d', { alpha: true });
+        tempCtx.save();
+    } else {
+        ctx.save();
+    }
+    
+    const targetCtx = useClipping ? tempCtx : ctx;
     
     // 親の変形を適用
-    applyParentTransform(layer);
-    
-    // 色抜きクリッピングを適用
-    const shouldClip = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
-    if (shouldClip) {
-        applyColorClipping(layer);
+    if (useClipping) {
+        if (typeof applyParentTransformToContext === 'function') {
+            applyParentTransformToContext(tempCtx, layer);
+        }
+    } else {
+        applyParentTransform(layer);
     }
     
     // 不透明度とブレンドモードを適用
-    ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1.0;
-    ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+    targetCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1.0;
+    targetCtx.globalCompositeOperation = layer.blendMode || 'source-over';
     
     // レイヤーの位置に移動
-    ctx.translate(layer.x, layer.y);
+    targetCtx.translate(layer.x, layer.y);
     
     // 現在表示すべき画像を決定
     let currentImg = layer.sequenceImages[0]; // デフォルトは閉じた口（最初のフレーム）
@@ -681,22 +695,22 @@ function drawLipSyncLayer(layer, time) {
     const anchorOffsetY = layer.anchorY * height;
     
     // アンカーポイントを原点に移動
-    ctx.translate(anchorOffsetX - width / 2, anchorOffsetY - height / 2);
+    targetCtx.translate(anchorOffsetX - width / 2, anchorOffsetY - height / 2);
     
     // 回転（アンカーポイントを中心に）
-    ctx.rotate(layer.rotation * Math.PI / 180);
+    targetCtx.rotate(layer.rotation * Math.PI / 180);
     
     // スケール（アンカーポイントを中心に）
-    ctx.scale(layer.scale, layer.scale);
+    targetCtx.scale(layer.scale, layer.scale);
     
     // 画像を描画
     // マスクを適用
     let maskApplied = false;
     if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
-        maskApplied = applyMaskToContext(ctx, layer, -anchorOffsetX, -anchorOffsetY);
+        maskApplied = applyMaskToContext(targetCtx, layer, -anchorOffsetX, -anchorOffsetY);
     }
     
-    ctx.drawImage(
+    targetCtx.drawImage(
         currentImg,
         -anchorOffsetX,
         -anchorOffsetY,
@@ -706,53 +720,85 @@ function drawLipSyncLayer(layer, time) {
     
     // マスクを解除
     if (maskApplied && typeof restoreFromMask === 'function') {
-        restoreFromMask(ctx);
+        restoreFromMask(targetCtx);
     }
     
     // アンカーポイント表示 - 書き出し中は描画しない
     if (typeof isExporting === 'undefined' || !isExporting) {
-        ctx.fillStyle = '#ff69b4';
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        targetCtx.fillStyle = '#ff69b4';
+        targetCtx.strokeStyle = '#ffffff';
+        targetCtx.lineWidth = 3;
+        targetCtx.beginPath();
+        targetCtx.arc(0, 0, 10, 0, Math.PI * 2);
+        targetCtx.fill();
+        targetCtx.stroke();
         
-        ctx.strokeStyle = '#ff69b4';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(-25, 0);
-        ctx.lineTo(25, 0);
-        ctx.moveTo(0, -25);
-        ctx.lineTo(0, 25);
-        ctx.stroke();
+        targetCtx.strokeStyle = '#ff69b4';
+        targetCtx.lineWidth = 3;
+        targetCtx.beginPath();
+        targetCtx.moveTo(-25, 0);
+        targetCtx.lineTo(25, 0);
+        targetCtx.moveTo(0, -25);
+        targetCtx.lineTo(0, 25);
+        targetCtx.stroke();
     }
     
-    ctx.restore();
+    if (useClipping) {
+        tempCtx.restore();
+        
+        // 色抜きクリッピングマスクを生成
+        const mask = typeof createColorClippingMask === 'function' ? createColorClippingMask(layer) : null;
+        if (mask) {
+            tempCtx.globalCompositeOperation = 'destination-in';
+            tempCtx.drawImage(mask, 0, 0);
+            tempCtx.globalCompositeOperation = 'source-over';
+        }
+        
+        // メインキャンバスに描画
+        ctx.save();
+        ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.restore();
+    } else {
+        ctx.restore();
+    }
 }
 
 // ===== まばたきレイヤー描画 =====
 function drawBlinkLayer(layer, time) {
     if (!layer.sequenceImages || layer.sequenceImages.length === 0) return;
     
-    ctx.save();
+    // 色抜きクリッピングが有効な場合は一時キャンバスを使用
+    const useClipping = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
+    
+    let tempCanvas, tempCtx;
+    if (useClipping) {
+        tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        tempCtx = tempCanvas.getContext('2d', { alpha: true });
+        tempCtx.save();
+    } else {
+        ctx.save();
+    }
+    
+    const targetCtx = useClipping ? tempCtx : ctx;
     
     // 親の変形を適用
-    applyParentTransform(layer);
-    
-    // 色抜きクリッピングを適用
-    const shouldClip = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
-    if (shouldClip) {
-        applyColorClipping(layer);
+    if (useClipping) {
+        if (typeof applyParentTransformToContext === 'function') {
+            applyParentTransformToContext(tempCtx, layer);
+        }
+    } else {
+        applyParentTransform(layer);
     }
     
     // 不透明度とブレンドモードを適用
-    ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1.0;
-    ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+    targetCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1.0;
+    targetCtx.globalCompositeOperation = layer.blendMode || 'source-over';
     
     // レイヤーの位置に移動
-    ctx.translate(layer.x, layer.y);
+    targetCtx.translate(layer.x, layer.y);
     
     // 現在表示すべき画像を決定
     let currentImg = layer.sequenceImages[0]; // デフォルトは開いた目（最初のフレーム）
@@ -788,22 +834,22 @@ function drawBlinkLayer(layer, time) {
     const anchorOffsetY = layer.anchorY * height;
     
     // アンカーポイントを原点に移動
-    ctx.translate(anchorOffsetX - width / 2, anchorOffsetY - height / 2);
+    targetCtx.translate(anchorOffsetX - width / 2, anchorOffsetY - height / 2);
     
     // 回転（アンカーポイントを中心に）
-    ctx.rotate(layer.rotation * Math.PI / 180);
+    targetCtx.rotate(layer.rotation * Math.PI / 180);
     
     // スケール（アンカーポイントを中心に）
-    ctx.scale(layer.scale, layer.scale);
+    targetCtx.scale(layer.scale, layer.scale);
     
     // 画像を描画
     // マスクを適用
     let blinkMaskApplied = false;
     if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
-        blinkMaskApplied = applyMaskToContext(ctx, layer, -anchorOffsetX, -anchorOffsetY);
+        blinkMaskApplied = applyMaskToContext(targetCtx, layer, -anchorOffsetX, -anchorOffsetY);
     }
     
-    ctx.drawImage(
+    targetCtx.drawImage(
         currentImg,
         -anchorOffsetX,
         -anchorOffsetY,
@@ -813,55 +859,91 @@ function drawBlinkLayer(layer, time) {
     
     // マスクを解除
     if (blinkMaskApplied && typeof restoreFromMask === 'function') {
-        restoreFromMask(ctx);
+        restoreFromMask(targetCtx);
     }
     
     // アンカーポイント表示 - 書き出し中は描画しない
     if (typeof isExporting === 'undefined' || !isExporting) {
-        ctx.fillStyle = '#87ceeb';
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        targetCtx.fillStyle = '#87ceeb';
+        targetCtx.strokeStyle = '#ffffff';
+        targetCtx.lineWidth = 3;
+        targetCtx.beginPath();
+        targetCtx.arc(0, 0, 10, 0, Math.PI * 2);
+        targetCtx.fill();
+        targetCtx.stroke();
         
-        ctx.strokeStyle = '#87ceeb';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(-25, 0);
-        ctx.lineTo(25, 0);
-        ctx.moveTo(0, -25);
-        ctx.lineTo(0, 25);
-        ctx.stroke();
+        targetCtx.strokeStyle = '#87ceeb';
+        targetCtx.lineWidth = 3;
+        targetCtx.beginPath();
+        targetCtx.moveTo(-25, 0);
+        targetCtx.lineTo(25, 0);
+        targetCtx.moveTo(0, -25);
+        targetCtx.lineTo(0, 25);
+        targetCtx.stroke();
     }
     
-    ctx.restore();
+    if (useClipping) {
+        tempCtx.restore();
+        
+        // 色抜きクリッピングマスクを生成
+        const mask = typeof createColorClippingMask === 'function' ? createColorClippingMask(layer) : null;
+        if (mask) {
+            tempCtx.globalCompositeOperation = 'destination-in';
+            tempCtx.drawImage(mask, 0, 0);
+            tempCtx.globalCompositeOperation = 'source-over';
+        }
+        
+        // メインキャンバスに描画
+        ctx.save();
+        ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.restore();
+    } else {
+        ctx.restore();
+    }
 }
 
 // ===== 連番アニメレイヤー描画 =====
 function drawSequenceLayer(layer, localTime) {
     if (!layer.sequenceImages || layer.sequenceImages.length === 0) return;
     
-    ctx.save();
+    // 色抜きクリッピングが有効な場合は一時キャンバスを使用
+    const useClipping = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
+    
+    let tempCanvas, tempCtx;
+    if (useClipping) {
+        tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        tempCtx = tempCanvas.getContext('2d', { alpha: true });
+        tempCtx.save();
+    } else {
+        ctx.save();
+    }
+    
+    const targetCtx = useClipping ? tempCtx : ctx;
     
     // 親の変形を適用
-    applyParentTransform(layer);
-    
-    // 色抜きクリッピングを適用
-    const shouldClip = layer.colorClipping && layer.colorClipping.enabled && layer.colorClipping.referenceLayerId;
-    if (shouldClip) {
-        applyColorClipping(layer);
+    if (useClipping) {
+        if (typeof applyParentTransformToContext === 'function') {
+            applyParentTransformToContext(tempCtx, layer);
+        }
+    } else {
+        applyParentTransform(layer);
     }
     
     // ブレンドモード設定
-    ctx.globalCompositeOperation = layer.blendMode || 'source-over';
-    ctx.globalAlpha = layer.opacity;
+    targetCtx.globalCompositeOperation = layer.blendMode || 'source-over';
+    targetCtx.globalAlpha = layer.opacity;
     
     // 現在の画像を取得
     let currentImg = layer.sequenceImages[0];
     if (!currentImg) {
-        ctx.restore();
+        if (useClipping) {
+            tempCtx.restore();
+        } else {
+            ctx.restore();
+        }
         return;
     }
     let width = currentImg.width;
@@ -898,23 +980,23 @@ function drawSequenceLayer(layer, localTime) {
     
     // 位置（Wiggleオフセットを適用）
     const wiggleOffset = typeof getWiggleOffset === 'function' ? getWiggleOffset(layer, localTime) : { x: 0, y: 0 };
-    ctx.translate(layer.x + wiggleOffset.x, layer.y + wiggleOffset.y);
+    targetCtx.translate(layer.x + wiggleOffset.x, layer.y + wiggleOffset.y);
     
     // 回転（アンカーポイントを中心に）
-    ctx.rotate(layer.rotation * Math.PI / 180);
+    targetCtx.rotate(layer.rotation * Math.PI / 180);
     
     // スケール（アンカーポイントを中心に）
-    ctx.scale(layer.scale, layer.scale);
+    targetCtx.scale(layer.scale, layer.scale);
     
     // 画像を描画（有効な画像のみ）
     // マスクを適用
     let seqMaskApplied = false;
     if (layer.mask && layer.mask.enabled && layer.mask.path && typeof applyMaskToContext === 'function') {
-        seqMaskApplied = applyMaskToContext(ctx, layer, -anchorOffsetX, -anchorOffsetY);
+        seqMaskApplied = applyMaskToContext(targetCtx, layer, -anchorOffsetX, -anchorOffsetY);
     }
     
     if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
-        ctx.drawImage(
+        targetCtx.drawImage(
             currentImg,
             -anchorOffsetX,
             -anchorOffsetY,
@@ -925,30 +1007,48 @@ function drawSequenceLayer(layer, localTime) {
     
     // マスクを解除
     if (seqMaskApplied && typeof restoreFromMask === 'function') {
-        restoreFromMask(ctx);
+        restoreFromMask(targetCtx);
     }
     
     // アンカーポイント表示 - 書き出し中は描画しない
     if (typeof isExporting === 'undefined' || !isExporting) {
-        ctx.fillStyle = '#20b2aa';
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        targetCtx.fillStyle = '#20b2aa';
+        targetCtx.strokeStyle = '#ffffff';
+        targetCtx.lineWidth = 3;
+        targetCtx.beginPath();
+        targetCtx.arc(0, 0, 10, 0, Math.PI * 2);
+        targetCtx.fill();
+        targetCtx.stroke();
         
-        ctx.strokeStyle = '#20b2aa';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(-25, 0);
-        ctx.lineTo(25, 0);
-        ctx.moveTo(0, -25);
-        ctx.lineTo(0, 25);
-        ctx.stroke();
+        targetCtx.strokeStyle = '#20b2aa';
+        targetCtx.lineWidth = 3;
+        targetCtx.beginPath();
+        targetCtx.moveTo(-25, 0);
+        targetCtx.lineTo(25, 0);
+        targetCtx.moveTo(0, -25);
+        targetCtx.lineTo(0, 25);
+        targetCtx.stroke();
     }
     
-    ctx.restore();
+    if (useClipping) {
+        tempCtx.restore();
+        
+        // 色抜きクリッピングマスクを生成
+        const mask = typeof createColorClippingMask === 'function' ? createColorClippingMask(layer) : null;
+        if (mask) {
+            tempCtx.globalCompositeOperation = 'destination-in';
+            tempCtx.drawImage(mask, 0, 0);
+            tempCtx.globalCompositeOperation = 'source-over';
+        }
+        
+        // メインキャンバスに描画
+        ctx.save();
+        ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.restore();
+    } else {
+        ctx.restore();
+    }
 }
 
 // ===== 親のトランスフォームを取得（累積） =====

@@ -73,7 +73,7 @@ function setColorClippingReference() {
     const value = select.value;
     
     if (value) {
-        layer.colorClipping.referenceLayerId = parseInt(value);
+        layer.colorClipping.referenceLayerId = Number(value);
     } else {
         layer.colorClipping.referenceLayerId = null;
     }
@@ -319,7 +319,6 @@ function applyParentTransformToContext(ctx, layer) {
     // パペットアンカーに追従する場合
     if (layer.followPuppetAnchor && layer.followPuppetAnchor.layerId && typeof getPuppetFollowPosition === 'function') {
         const followPos = getPuppetFollowPosition(layer.followPuppetAnchor);
-        console.log('🎯 [追従描画] followPos:', followPos);
         ctx.translate(followPos.x, followPos.y);
         return;
     }
@@ -376,8 +375,6 @@ function createColorClippingMask(layer) {
     const imageData = originalMaskCtx.getImageData(0, 0, originalWidth, originalHeight);
     const data = imageData.data;
     
-    console.log(`原寸画像で色判定: サイズ(${originalWidth}x${originalHeight}), 色RGB(${targetColor.r},${targetColor.g},${targetColor.b}), 許容値${tolerance}`);
-    
     // 各ピクセルを処理（原寸で判定）
     for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
@@ -388,15 +385,13 @@ function createColorClippingMask(layer) {
         // 色が設定されていない場合は参照レイヤーの不透明部分全体をマスクに
         if (noColorSet) {
             if (a > 0) {
-                // 不透明部分は白(マスク)
+                // 不透明・半透明部分は白にしてアルファ値を保持
                 data[i] = 255;
                 data[i + 1] = 255;
                 data[i + 2] = 255;
-                data[i + 3] = 255;
-            } else {
-                // 透明部分はそのまま
-                data[i + 3] = 0;
+                // data[i + 3] = a; // アルファ値はそのまま保持
             }
+            // 透明部分はそのまま（何もしない）
         } else {
             // 色の距離を計算（原寸ピクセルで判定）
             const distance = Math.sqrt(

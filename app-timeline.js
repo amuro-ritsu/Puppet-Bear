@@ -262,6 +262,13 @@ function renderTimelineLayer(layer, y, depth) {
         });
     }
     
+    // ボーンレイヤーの場合は boneParams.boneKeyframes を使用
+    if (layer.type === 'bone' && layer.boneParams && layer.boneParams.boneKeyframes) {
+        layer.boneParams.boneKeyframes.forEach((kf, kfIndex) => {
+            renderBoneKeyframe(layer, kfIndex, y + 20);
+        });
+    }
+    
     // フォルダの歩行キーフレームを描画
     if (layer.type === 'folder' && layer.walkingEnabled && layer.walkingParams && layer.walkingParams.keyframes) {
         layer.walkingParams.keyframes.forEach((kf, kfIndex) => {
@@ -279,7 +286,7 @@ function renderTimelineLayer(layer, y, depth) {
     y += 40;
     
     // プロパティを展開表示（音声レイヤー以外）
-    if (isExpanded && layer.type !== 'audio' && (layer.type === 'image' || layer.type === 'lipsync' || layer.type === 'blink' || layer.type === 'bounce' || layer.type === 'puppet' || layer.type === 'folder')) {
+    if (isExpanded && layer.type !== 'audio' && (layer.type === 'image' || layer.type === 'lipsync' || layer.type === 'blink' || layer.type === 'bounce' || layer.type === 'bone' || layer.type === 'puppet' || layer.type === 'folder')) {
         const properties = ['x', 'y', 'rotation', 'scale', 'opacity'];
         const propertyNames = {
             'x': 'X位置',
@@ -617,6 +624,70 @@ function renderBounceKeyframe(layer, kfIndex, y) {
         }
         render();
     }, { passive: false });
+    
+    timelineContent.appendChild(keyframeEl);
+}
+
+// ===== ボーンキーフレーム描画 =====
+function renderBoneKeyframe(layer, kfIndex, y) {
+    const timelineContent = document.getElementById('timeline-content');
+    if (!timelineContent || !layer.boneParams || !layer.boneParams.boneKeyframes || !layer.boneParams.boneKeyframes[kfIndex]) return;
+    
+    const kf = layer.boneParams.boneKeyframes[kfIndex];
+    
+    const keyframeEl = document.createElement('div');
+    keyframeEl.className = 'keyframe bone';
+    
+    const framePos = kf.frame * timelinePixelsPerFrame;
+    keyframeEl.style.left = framePos + 'px';
+    keyframeEl.style.top = y + 'px';
+    keyframeEl.style.zIndex = '10';
+    
+    // ボーンキーフレームは緑色
+    keyframeEl.style.background = 'linear-gradient(135deg, #00ff66, #00cc52)';
+    keyframeEl.style.boxShadow = '0 0 4px rgba(0, 255, 102, 0.5)';
+    
+    keyframeEl.dataset.layerId = layer.id;
+    keyframeEl.dataset.boneKeyframeIndex = kfIndex;
+    
+    keyframeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // キーフレームの時間に移動
+        currentTime = kf.frame / projectFPS;
+        updatePlayhead();
+        if (typeof applyKeyframeInterpolation === 'function') {
+            applyKeyframeInterpolation();
+        }
+        render();
+    });
+    
+    keyframeEl.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // キーフレームの時間に移動
+        currentTime = kf.frame / projectFPS;
+        updatePlayhead();
+        if (typeof applyKeyframeInterpolation === 'function') {
+            applyKeyframeInterpolation();
+        }
+        render();
+    }, { passive: false });
+    
+    // 右クリックでコンテキストメニュー（削除）
+    keyframeEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (confirm(`このボーンキーフレーム (${kf.frame}f) を削除しますか？`)) {
+            if (typeof removeBoneKeyframe === 'function') {
+                removeBoneKeyframe(layer, kf.frame);
+                updateTimeline();
+                render();
+                if (typeof saveHistory === 'function') {
+                    saveHistory();
+                }
+            }
+        }
+    });
     
     timelineContent.appendChild(keyframeEl);
 }

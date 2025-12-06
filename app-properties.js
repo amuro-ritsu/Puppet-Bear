@@ -23,7 +23,8 @@ function generateLayerTypeUI(layer) {
     const types = [
         { value: 'image', label: '🖼️ 画像', desc: '通常の画像レイヤー' },
         { value: 'puppet', label: '🎭 パペット', desc: 'ハンドル操作で動かせる' },
-        { value: 'bounce', label: '🎈 弾みレイヤー', desc: '上下に弾むアニメ' }
+        { value: 'bounce', label: '🎈 弾みレイヤー', desc: '上下に弾むアニメ' },
+        { value: 'bone', label: '🦴 ボーン', desc: 'ボーンでメッシュ変形' }
     ];
     
     return `
@@ -109,6 +110,20 @@ function changeLayerType(newType) {
                     };
             }
             break;
+            
+        case 'bone':
+            // ボーンレイヤーのプロパティ
+            if (!layer.boneParams) {
+                layer.boneParams = typeof getDefaultBoneParams === 'function' 
+                    ? getDefaultBoneParams() 
+                    : {
+                        bones: [],
+                        divisions: 30,
+                        influenceRadius: 0.3,
+                        boneKeyframes: []
+                    };
+            }
+            break;
     }
     
     // UI更新
@@ -130,6 +145,7 @@ function getLayerTypeName(type) {
         case 'image': return '画像';
         case 'puppet': return 'パペット';
         case 'bounce': return '弾みレイヤー';
+        case 'bone': return 'ボーン';
         case 'folder': return 'フォルダ';
         case 'lipsync': return '口パク';
         case 'blink': return 'まばたき';
@@ -1271,6 +1287,33 @@ function updatePropertiesPanel() {
         if (typeof drawPuppetAnchorElements === 'function') {
             drawPuppetAnchorElements();
         }
+        
+        // ツールボタン状態を更新
+        updateToolButtons();
+        
+        return;
+    }
+    
+    // ボーンレイヤーの場合
+    if (layer.type === 'bone') {
+        propertiesPanel.innerHTML = `
+            <h3>🦴 ${layer.name}</h3>
+            
+            ${generateTransformUI(layer)}
+            
+            ${generateBlendModeUI(layer)}
+            
+            ${typeof generateBonePropertiesUI === 'function' ? generateBonePropertiesUI(layer) : `
+                <div class="property-group">
+                    <h4>🦴 ボーン機能</h4>
+                    <p style="color: var(--biscuit-light);">app-bone.jsが読み込まれていません</p>
+                </div>
+            `}
+            
+            ${generateParentUI(layer)}
+            
+            ${typeof generateWiggleUI === 'function' ? generateWiggleUI(layer) : ''}
+        `;
         
         // ツールボタン状態を更新
         updateToolButtons();
