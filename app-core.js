@@ -1420,3 +1420,56 @@ function calculateJumpOffset(folder, localTime) {
     
     return { x: worldX, y: worldY };
 }
+
+// ===== キャンバスサイズ設定 =====
+function setCanvasSize() {
+    const widthInput = document.getElementById('canvas-width-input');
+    const heightInput = document.getElementById('canvas-height-input');
+    
+    if (!widthInput || !heightInput) return;
+    
+    const newWidth = parseInt(widthInput.value) || 1920;
+    const newHeight = parseInt(heightInput.value) || 1080;
+    
+    // 範囲制限
+    const clampedWidth = Math.max(100, Math.min(7680, newWidth));
+    const clampedHeight = Math.max(100, Math.min(4320, newHeight));
+    
+    // 入力欄を更新
+    widthInput.value = clampedWidth;
+    heightInput.value = clampedHeight;
+    
+    // キャンバスサイズを変更
+    canvas.width = clampedWidth;
+    canvas.height = clampedHeight;
+    
+    console.log(`📐 キャンバスサイズ変更: ${clampedWidth}×${clampedHeight}`);
+    
+    // 再描画
+    render();
+    
+    // 履歴に保存
+    if (typeof saveHistory === 'function') {
+        saveHistory();
+    }
+}
+
+// ===== キャンバスサイズプリセット =====
+function setCanvasSizePreset(width, height) {
+    const widthInput = document.getElementById('canvas-width-input');
+    const heightInput = document.getElementById('canvas-height-input');
+    
+    if (widthInput) widthInput.value = width;
+    if (heightInput) heightInput.value = height;
+    
+    setCanvasSize();
+}
+
+// ===== 現在のキャンバスサイズをUIに反映 =====
+function updateCanvasSizeUI() {
+    const widthInput = document.getElementById('canvas-width-input');
+    const heightInput = document.getElementById('canvas-height-input');
+    
+    if (widthInput) widthInput.value = canvas.width;
+    if (heightInput) heightInput.value = canvas.height;
+}
