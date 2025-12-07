@@ -604,7 +604,7 @@ function drawLayerWithWindSway(layer, anchorX, anchorY, localTime) {
         // アンカーポイントを軸にして揺らす（アンカー回転を適用）
         applyWindShakeWebGL(ctx, imgToUse, layer.width, layer.height, localTime, layer.windSwayParams, layer.anchorX, layer.anchorY, anchorRotation, animationStartTime);
     } else {
-        ctx.drawImage(layer.img, anchorX, anchorY, layer.width, layer.height);
+        ctx.drawImage(layer.img, anchorX, anchorY);
     }
 }
 

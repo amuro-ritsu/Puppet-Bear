@@ -131,6 +131,11 @@ function render() {
             return;
         }
         
+        // 音声レイヤーは描画しない
+        if (layer.type === 'audio') {
+            return;
+        }
+        
         // 口パクレイヤーとまばたきレイヤーは専用描画
         if (layer.type === 'lipsync') {
             drawLipSyncLayer(layer, localTime);
@@ -317,9 +322,7 @@ function render() {
             targetCtx.drawImage(
                 layer.img,
                 -anchorOffsetX,
-                -anchorOffsetY,
-                layer.width,
-                layer.height
+                -anchorOffsetY
             );
             
             // マスクを解除
@@ -1301,7 +1304,7 @@ function drawFolderWithWindSway(folder, localTime) {
             applyWindShakeWebGL(ctx, layer.img, layer.width, layer.height, localTime, folder.windSwayParams, layer.anchorX, layer.anchorY);
         } else {
             // 風揺れが使用できない場合は通常描画
-            ctx.drawImage(layer.img, -anchorOffsetX, -anchorOffsetY, layer.width, layer.height);
+            ctx.drawImage(layer.img, -anchorOffsetX, -anchorOffsetY);
         }
         
         // アンカーポイント表示（書き出し中は描画しない）

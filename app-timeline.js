@@ -143,12 +143,18 @@ function createTimelineGrid() {
 
 // ===== タイムライン更新 =====
 function updateTimeline() {
+    console.log('📊 updateTimeline開始, timelinePixelsPerFrame:', timelinePixelsPerFrame);
+    
     const timelineLayers = document.getElementById('timeline-layers');
     const timelineContent = document.getElementById('timeline-content');
-    if (!timelineLayers || !timelineContent) return;
+    if (!timelineLayers || !timelineContent) {
+        console.error('❌ タイムライン要素が見つかりません');
+        return;
+    }
     
     // グリッドを再作成（ズーム変更対応）
     createTimelineGrid();
+    console.log('📊 グリッド作成完了, timeline-grid:', document.getElementById('timeline-grid'));
     
     // 既存のレイヤーアイテムとトラックを削除
     timelineLayers.innerHTML = '';

@@ -226,13 +226,7 @@ async function loadProject(file) {
         if (projectData.exportMarkers && typeof exportMarkers !== 'undefined') {
             exportMarkers.start = projectData.exportMarkers.start;
             exportMarkers.end = projectData.exportMarkers.end;
-            // UIを更新
-            if (typeof updateExportMarkersDisplay === 'function') {
-                updateExportMarkersDisplay();
-            }
-            if (typeof updateTimeline === 'function') {
-                updateTimeline();
-            }
+            // UIは最後にまとめて更新
         }
         
         nextLayerId = projectData.nextLayerId || 1;
@@ -292,10 +286,24 @@ async function loadProject(file) {
             loadedLayers++;
         }
         
-        // UI更新
-        updateLayerList();
-        updateTimeline();
-        render();
+        // UI更新（エラーが発生しても続行）
+        try {
+            updateLayerList();
+        } catch (e) {
+            console.error('❌ updateLayerList エラー:', e);
+        }
+        
+        try {
+            updateTimeline();
+        } catch (e) {
+            console.error('❌ updateTimeline エラー:', e);
+        }
+        
+        try {
+            render();
+        } catch (e) {
+            console.error('❌ render エラー:', e);
+        }
         
         document.body.removeChild(progressOverlay);
         console.log('✅ プロジェクトを読み込みました');

@@ -932,7 +932,7 @@ function renderLayersOnly() {
             ctx.rotate(layer.rotation * Math.PI / 180);
             ctx.scale(layer.scale, layer.scale);
             
-            ctx.drawImage(layer.img, -anchorOffsetX, -anchorOffsetY, layer.width, layer.height);
+            ctx.drawImage(layer.img, -anchorOffsetX, -anchorOffsetY);
             ctx.restore();
         }
     });
