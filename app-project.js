@@ -81,13 +81,18 @@ async function saveProject() {
         // プロジェクト設定
         const projectData = {
             version: '1.0.0',
-            appVersion: 'Puppet Bear v1.15.2',
+            appVersion: 'Puppet Bear v1.16.0',
             createdAt: new Date().toISOString(),
             settings: {
                 fps: projectFPS,
                 canvasWidth: canvas.width,
                 canvasHeight: canvas.height
             },
+            // 書き出し範囲マーカー
+            exportMarkers: typeof exportMarkers !== 'undefined' ? {
+                start: exportMarkers.start,
+                end: exportMarkers.end
+            } : null,
             layers: layerData,
             nextLayerId: nextLayerId
         };
@@ -214,6 +219,19 @@ async function loadProject(file) {
                 const heightInput = document.getElementById('canvas-height-input');
                 if (widthInput) widthInput.value = canvas.width;
                 if (heightInput) heightInput.value = canvas.height;
+            }
+        }
+        
+        // 書き出し範囲マーカーを復元
+        if (projectData.exportMarkers && typeof exportMarkers !== 'undefined') {
+            exportMarkers.start = projectData.exportMarkers.start;
+            exportMarkers.end = projectData.exportMarkers.end;
+            // UIを更新
+            if (typeof updateExportMarkersDisplay === 'function') {
+                updateExportMarkersDisplay();
+            }
+            if (typeof updateTimeline === 'function') {
+                updateTimeline();
             }
         }
         
