@@ -1239,7 +1239,7 @@ function createLipSyncLayer() {
                 anchorY: 0.5,
                 visible: true,
                 blendMode: 'source-over',
-                fps: 12, // ループ再生FPS
+                fps: 24, // ループ再生FPS
                 
                 // パペット機能
                 parentLayerId: null,
@@ -1303,7 +1303,7 @@ function createBlinkLayer() {
                 anchorY: 0.5,
                 visible: true,
                 blendMode: 'source-over',
-                fps: 12, // アニメーション再生FPS
+                fps: 24, // アニメーション再生FPS
                 
                 // パペット機能
                 parentLayerId: null,
@@ -1366,7 +1366,7 @@ function createSequenceLayer() {
                 anchorY: 0.5,
                 visible: true,
                 blendMode: 'source-over',
-                fps: 12, // ループ再生FPS
+                fps: 24, // ループ再生FPS
                 frameSkip: 0, // コマ落とし（0=スキップなし）
                 
                 // パペット機能
@@ -1535,7 +1535,7 @@ async function createCrossSectionLayer() {
         anchorY: 0.5,
         visible: true,
         blendMode: 'source-over',
-        fps: 12,
+        fps: 24,
         frameSkip: 0,
         
         // パペット機能

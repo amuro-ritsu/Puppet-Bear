@@ -15,11 +15,6 @@ const imageDataUrlCache = new Map();
 function getImageDataUrl(img) {
     if (!img) return null;
     
-    // すでにDataURL形式ならそのまま返す
-    if (img.src && img.src.startsWith('data:')) {
-        return img.src;
-    }
-    
     // キャッシュにあればそれを返す
     if (imageDataUrlCache.has(img.src)) {
         return imageDataUrlCache.get(img.src);
@@ -28,10 +23,8 @@ function getImageDataUrl(img) {
     // Canvasに描画してDataURLを生成
     try {
         const tempCanvas = document.createElement('canvas');
-        const w = img.naturalWidth || img.width || 100;
-        const h = img.naturalHeight || img.height || 100;
-        tempCanvas.width = w;
-        tempCanvas.height = h;
+        tempCanvas.width = img.naturalWidth || img.width;
+        tempCanvas.height = img.naturalHeight || img.height;
         const tempCtx = tempCanvas.getContext('2d', { alpha: true });
         tempCtx.drawImage(img, 0, 0);
         const dataUrl = tempCanvas.toDataURL('image/png');
@@ -72,9 +65,9 @@ function serializeLayer(layer) {
         serialized.imgDataUrl = getImageDataUrl(layer.img);
     }
     
-    // 連番画像を持つレイヤー（口パク・まばたき）
-    if (layer.images && layer.images.length > 0) {
-        serialized.imagesDataUrls = layer.images.map(img => getImageDataUrl(img));
+    // 連番画像を持つレイヤー（口パク・まばたき・連番アニメ）
+    if (layer.sequenceImages && layer.sequenceImages.length > 0) {
+        serialized.sequenceImagesDataUrls = layer.sequenceImages.map(img => getImageDataUrl(img));
     }
     
     // タイプ別の追加プロパティ
@@ -82,15 +75,9 @@ function serializeLayer(layer) {
         case 'folder':
             serialized.collapsed = layer.collapsed;
             serialized.childrenIds = layer.childrenIds ? [...layer.childrenIds] : [];
-            // ジャンプパラメータ
-            if (layer.jumpParams) {
-                serialized.jumpParams = JSON.parse(JSON.stringify(layer.jumpParams));
-            }
-            // 歩行アニメーション
-            if (layer.walkingEnabled !== undefined) {
-                serialized.walkingEnabled = layer.walkingEnabled;
-                serialized.walkingParams = layer.walkingParams ? JSON.parse(JSON.stringify(layer.walkingParams)) : null;
-            }
+            // フォルダの追加プロパティ
+            serialized.walkingEnabled = layer.walkingEnabled;
+            serialized.walkingParams = layer.walkingParams ? JSON.parse(JSON.stringify(layer.walkingParams)) : null;
             break;
             
         case 'lipsync':
@@ -98,6 +85,7 @@ function serializeLayer(layer) {
             serialized.currentImageIndex = layer.currentImageIndex;
             serialized.mouthOpenThreshold = layer.mouthOpenThreshold;
             serialized.sensitivity = layer.sensitivity;
+            serialized.fps = layer.fps;
             break;
             
         case 'blink':
@@ -106,6 +94,12 @@ function serializeLayer(layer) {
             serialized.blinkInterval = layer.blinkInterval;
             serialized.blinkDuration = layer.blinkDuration;
             serialized.lastBlinkTime = layer.lastBlinkTime;
+            serialized.fps = layer.fps;
+            break;
+            
+        case 'sequence':
+            serialized.fps = layer.fps;
+            serialized.frameSkip = layer.frameSkip;
             break;
             
         case 'bounce':
@@ -119,6 +113,12 @@ function serializeLayer(layer) {
             serialized.puppetStrength = layer.puppetStrength;
             serialized.puppetSmoothness = layer.puppetSmoothness;
             serialized.meshDensity = layer.meshDensity;
+            serialized.puppetPins = layer.puppetPins ? JSON.parse(JSON.stringify(layer.puppetPins)) : [];
+            break;
+            
+        case 'bone':
+            serialized.bones = layer.bones ? JSON.parse(JSON.stringify(layer.bones)) : [];
+            serialized.boneAnimations = layer.boneAnimations ? JSON.parse(JSON.stringify(layer.boneAnimations)) : {};
             break;
             
         case 'audio':
@@ -134,31 +134,25 @@ function serializeLayer(layer) {
             break;
     }
     
+    // マスク
+    if (layer.mask) {
+        serialized.mask = JSON.parse(JSON.stringify(layer.mask));
+    }
+    
+    // Wiggle
+    if (layer.wiggle) {
+        serialized.wiggle = JSON.parse(JSON.stringify(layer.wiggle));
+    }
+    
     // 風揺れ
     if (layer.windSwayEnabled !== undefined) {
         serialized.windSwayEnabled = layer.windSwayEnabled;
         serialized.windSwayParams = layer.windSwayParams ? JSON.parse(JSON.stringify(layer.windSwayParams)) : null;
     }
     
-    // Wiggle振動エフェクト
-    if (layer.wiggleEnabled !== undefined) {
-        serialized.wiggleEnabled = layer.wiggleEnabled;
-        serialized.wiggleParams = layer.wiggleParams ? JSON.parse(JSON.stringify(layer.wiggleParams)) : null;
-    }
-    
-    // キーフレームループ
-    if (layer.keyframeLoop !== undefined) {
-        serialized.keyframeLoop = layer.keyframeLoop;
-    }
-    
     // 色抜きクリッピング
     if (layer.colorClipping) {
         serialized.colorClipping = JSON.parse(JSON.stringify(layer.colorClipping));
-    }
-    
-    // マスク
-    if (layer.mask) {
-        serialized.mask = JSON.parse(JSON.stringify(layer.mask));
     }
     
     return serialized;
@@ -231,23 +225,16 @@ async function loadHistory() {
         
         // 画像の復元
         if (layerData.imgDataUrl) {
-            const img = await loadImageFromDataUrl(layerData.imgDataUrl);
-            if (img) {
-                layer.img = img;
-            } else {
-                console.warn('画像復元失敗、DataURLを保持:', layer.name);
-                // 画像オブジェクトが作れない場合、後で再試行できるようDataURLを保持
-            }
+            layer.img = await loadImageFromDataUrl(layerData.imgDataUrl);
             delete layer.imgDataUrl;
         }
         
-        // 連番画像の復元（口パク・まばたき）
-        if (layerData.imagesDataUrls && layerData.imagesDataUrls.length > 0) {
-            const loadedImages = await Promise.all(
-                layerData.imagesDataUrls.map(url => loadImageFromDataUrl(url))
+        // 連番画像の復元（口パク・まばたき・連番アニメ）
+        if (layerData.sequenceImagesDataUrls && layerData.sequenceImagesDataUrls.length > 0) {
+            layer.sequenceImages = await Promise.all(
+                layerData.sequenceImagesDataUrls.map(url => loadImageFromDataUrl(url))
             );
-            layer.images = loadedImages.filter(img => img !== null);
-            delete layer.imagesDataUrls;
+            delete layer.sequenceImagesDataUrls;
         }
         
         // 音声レイヤーの復元

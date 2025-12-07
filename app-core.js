@@ -681,7 +681,7 @@ function drawLipSyncLayer(layer, time) {
     
     // 喋っている場合は連番アニメーションをループ
     if (isSpeaking && layer.sequenceImages.length > 1) {
-        const fps = layer.fps || 12;
+        const fps = layer.fps || 24;
         const framesSinceStart = currentFrame - speakStartFrame;
         const sequenceLength = layer.sequenceImages.length - 1; // 最初のフレーム（閉じた口）を除く
         const seqIndex = Math.floor((framesSinceStart * fps / 30) % sequenceLength);
@@ -814,7 +814,7 @@ function drawBlinkLayer(layer, time) {
     for (const kf of sortedKeyframes) {
         if (currentFrame >= kf.frame) {
             const framesSinceStart = currentFrame - kf.frame;
-            const fps = layer.fps || 12;
+            const fps = layer.fps || 24;
             const totalAnimFrames = (layer.sequenceImages.length - 1) * (30 / fps);
             
             // まばたきアニメーションの長さ内ならアニメーション再生
@@ -950,7 +950,7 @@ function drawSequenceLayer(layer, localTime) {
     let height = currentImg.height;
     
     // 常にループ再生（コマ落とし対応）
-    const fps = layer.fps || 12;
+    const fps = layer.fps || 24;
     const frameSkip = layer.frameSkip || 0; // 何フレームスキップするか
     const skipInterval = frameSkip + 1; // 実際の間隔（例: frameSkip=2なら3フレームごと）
     

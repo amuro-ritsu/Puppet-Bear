@@ -747,9 +747,9 @@ function updatePropertiesPanel() {
                 
                 <div style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        FPS: <span id="lipSyncFpsValue">${layer.fps || 12}</span>
+                        FPS: <span id="lipSyncFpsValue">${layer.fps || 24}</span>
                     </label>
-                    <input type="range" class="property-slider" value="${layer.fps || 12}" 
+                    <input type="range" class="property-slider" value="${layer.fps || 24}" 
                         min="1" max="60" step="1"
                         oninput="document.getElementById('lipSyncFpsValue').textContent = this.value; updateLayerProperty('fps', parseInt(this.value))">
                 </div>
@@ -813,9 +813,9 @@ function updatePropertiesPanel() {
                 
                 <div style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        FPS: <span id="blinkFpsValue">${layer.fps || 12}</span>
+                        FPS: <span id="blinkFpsValue">${layer.fps || 24}</span>
                     </label>
-                    <input type="range" class="property-slider" value="${layer.fps || 12}" 
+                    <input type="range" class="property-slider" value="${layer.fps || 24}" 
                         min="1" max="60" step="1"
                         oninput="document.getElementById('blinkFpsValue').textContent = this.value; updateLayerProperty('fps', parseInt(this.value))">
                 </div>
@@ -881,9 +881,9 @@ function updatePropertiesPanel() {
                 
                 <div style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        FPS: <span id="sequenceFpsValue">${layer.fps || 12}</span>
+                        FPS: <span id="sequenceFpsValue">${layer.fps || 24}</span>
                     </label>
-                    <input type="range" class="property-slider" value="${layer.fps || 12}" 
+                    <input type="range" class="property-slider" value="${layer.fps || 24}" 
                         min="1" max="60" step="1"
                         oninput="document.getElementById('sequenceFpsValue').textContent = this.value; updateLayerProperty('fps', parseInt(this.value))">
                 </div>
@@ -970,9 +970,9 @@ function updatePropertiesPanel() {
                 
                 <div style="margin-bottom: 12px;">
                     <label style="font-size: 11px; display: block; margin-bottom: 4px;">
-                        FPS: <span id="crosssectionFpsValue">${layer.fps || 12}</span>
+                        FPS: <span id="crosssectionFpsValue">${layer.fps || 24}</span>
                     </label>
-                    <input type="range" class="property-slider" value="${layer.fps || 12}" 
+                    <input type="range" class="property-slider" value="${layer.fps || 24}" 
                         min="1" max="60" step="1"
                         oninput="document.getElementById('crosssectionFpsValue').textContent = this.value; updateLayerProperty('fps', parseInt(this.value))">
                 </div>

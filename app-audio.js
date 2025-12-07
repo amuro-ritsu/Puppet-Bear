@@ -505,11 +505,11 @@ function generateAudioPropertiesUI(layer) {
                             開始フレーム: <span id="audioClipStart${index}">${clip.startFrame}</span>
                         </label>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="range" class="property-slider" style="flex: 1;" value="${clip.startFrame}" 
+                            <input type="range" id="audioClipStartSlider${index}" class="property-slider" style="flex: 1;" value="${clip.startFrame}" 
                                 min="0" max="300" step="1"
-                                oninput="document.getElementById('audioClipStart${index}').textContent = this.value; setAudioClipStartFrame(${layer.id}, ${clip.id}, parseInt(this.value))">
-                            <input type="number" style="width: 70px;" value="${clip.startFrame}" min="0"
-                                onchange="setAudioClipStartFrame(${layer.id}, ${clip.id}, parseInt(this.value)); updatePropertiesPanel()">
+                                oninput="document.getElementById('audioClipStart${index}').textContent = this.value; document.getElementById('audioClipStartNum${index}').value = this.value; setAudioClipStartFrame(${layer.id}, ${clip.id}, parseInt(this.value))">
+                            <input type="number" id="audioClipStartNum${index}" style="width: 70px;" value="${clip.startFrame}" min="0"
+                                oninput="document.getElementById('audioClipStart${index}').textContent = this.value; document.getElementById('audioClipStartSlider${index}').value = this.value; setAudioClipStartFrame(${layer.id}, ${clip.id}, parseInt(this.value))">
                         </div>
                         <div style="font-size: 10px; color: #6b8e6b; margin-top: 4px;">
                             終了: ${endFrame}フレーム (${(endFrame / projectFPS).toFixed(2)}秒)

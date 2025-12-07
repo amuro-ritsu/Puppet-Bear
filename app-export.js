@@ -118,9 +118,11 @@ function updateExportMarkersDisplay() {
     
     const range = getExportRange();
     const duration = (range.end - range.start) / projectFPS;
+    const startTime = range.start / projectFPS;
+    const endTime = range.end / projectFPS;
     
-    let startText = exportMarkers.start !== null ? `${exportMarkers.start}f` : '0f (自動)';
-    let endText = exportMarkers.end !== null ? `${exportMarkers.end}f` : `${range.end}f (自動)`;
+    let startText = exportMarkers.start !== null ? `${startTime.toFixed(2)}秒` : '0秒 (自動)';
+    let endText = exportMarkers.end !== null ? `${endTime.toFixed(2)}秒` : `${endTime.toFixed(2)}秒 (自動)`;
     
     markerInfo.innerHTML = `
         <span style="color: #4CAF50;">▶ ${startText}</span>
@@ -128,6 +130,12 @@ function updateExportMarkersDisplay() {
         <span style="color: #f44336;">◼ ${endText}</span>
         <span style="margin-left: 12px; color: var(--biscuit);">(${duration.toFixed(2)}秒 / ${range.end - range.start}フレーム)</span>
     `;
+    
+    // 時間入力欄も更新
+    const startInput = document.getElementById('export-start-time');
+    const endInput = document.getElementById('export-end-time');
+    if (startInput) startInput.value = startTime.toFixed(2);
+    if (endInput) endInput.value = endTime.toFixed(2);
 }
 
 // タイムラインにマーカーを描画
@@ -337,14 +345,14 @@ function showExportDialog() {
                 </div>
                 <div style="margin-top: 12px; display: flex; gap: 12px;">
                     <label style="font-size: 12px; color: var(--biscuit);">
-                        開始: <input type="number" id="export-start-frame" value="${range.start}" min="0" 
-                            style="width: 60px; padding: 4px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-light); border-radius: 4px;"
-                            onchange="setExportStartMarker(parseInt(this.value))">f
+                        開始: <input type="number" id="export-start-time" value="${(range.start / projectFPS).toFixed(2)}" min="0" step="0.01"
+                            style="width: 70px; padding: 4px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-light); border-radius: 4px;"
+                            onchange="setExportStartMarker(Math.round(parseFloat(this.value) * projectFPS))">秒
                     </label>
                     <label style="font-size: 12px; color: var(--biscuit);">
-                        終了: <input type="number" id="export-end-frame" value="${range.end}" min="0"
-                            style="width: 60px; padding: 4px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-light); border-radius: 4px;"
-                            onchange="setExportEndMarker(parseInt(this.value))">f
+                        終了: <input type="number" id="export-end-time" value="${(range.end / projectFPS).toFixed(2)}" min="0" step="0.01"
+                            style="width: 70px; padding: 4px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-light); border-radius: 4px;"
+                            onchange="setExportEndMarker(Math.round(parseFloat(this.value) * projectFPS))">秒
                     </label>
                 </div>
             </div>
