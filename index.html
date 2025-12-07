@@ -58,31 +58,47 @@
         .timeline-rows-container {
             display: flex;
             flex-direction: row;
-            height: 100%;
             flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
         .timeline {
-            overflow-x: scroll !important;
-            overflow-y: hidden !important;
+            overflow: hidden !important;
             flex: 1;
-            height: 100%;
+            min-width: 0;
+            position: relative;
         }
-        .timeline::-webkit-scrollbar {
+        /* 横スクロールバー専用エリア - 常に下部固定 */
+        .timeline-scrollbar-container {
+            width: 100%;
+            height: 18px;
+            overflow-x: scroll;
+            overflow-y: hidden;
+            background: var(--chocolate-dark, #2a1810);
+            flex-shrink: 0;
+        }
+        .timeline-scrollbar-container::-webkit-scrollbar {
             height: 14px;
             background: var(--chocolate-dark, #2a1810);
         }
-        .timeline::-webkit-scrollbar-thumb {
+        .timeline-scrollbar-container::-webkit-scrollbar-thumb {
             background: var(--biscuit-dark, #8b6914);
             border-radius: 7px;
             border: 2px solid var(--chocolate-dark, #2a1810);
         }
-        .timeline::-webkit-scrollbar-thumb:hover {
+        .timeline-scrollbar-container::-webkit-scrollbar-thumb:hover {
             background: var(--biscuit-medium, #d4a84b);
         }
+        .timeline-scrollbar-inner {
+            height: 1px;
+        }
         .timeline-body {
-            overflow-y: auto;
-            overflow-x: hidden;
+            overflow: hidden;
             flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
     </style>
     
@@ -250,6 +266,9 @@
                                 <div id="timeline-content" class="timeline-content"></div>
                                 <div id="playhead" class="playhead"></div>
                             </div>
+                        </div>
+                        <div class="timeline-scrollbar-container" id="timeline-scrollbar">
+                            <div class="timeline-scrollbar-inner" id="timeline-scrollbar-inner"></div>
                         </div>
                     </div>
                 </div>

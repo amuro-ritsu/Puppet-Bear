@@ -72,6 +72,43 @@ function initTimeline() {
     // タイムライングリッドを作成
     createTimelineGrid();
     
+    // ★ 固定スクロールバーの同期処理 ★
+    const timeline = document.getElementById('timeline');
+    const scrollbar = document.getElementById('timeline-scrollbar');
+    const scrollbarInner = document.getElementById('timeline-scrollbar-inner');
+    
+    if (timeline && scrollbar && scrollbarInner) {
+        // スクロールバーの内側要素の幅をタイムラインコンテンツと同期
+        const syncScrollbarWidth = () => {
+            const contentWidth = timelineContent.scrollWidth || 30000;
+            scrollbarInner.style.width = contentWidth + 'px';
+        };
+        syncScrollbarWidth();
+        
+        // スクロールバー → タイムライン同期
+        scrollbar.addEventListener('scroll', () => {
+            timeline.scrollLeft = scrollbar.scrollLeft;
+        });
+        
+        // タイムライン → スクロールバー同期（ホイールスクロール対応）
+        timeline.addEventListener('scroll', () => {
+            scrollbar.scrollLeft = timeline.scrollLeft;
+        });
+        
+        // ホイールで横スクロール
+        timeline.addEventListener('wheel', (e) => {
+            if (e.deltaX !== 0 || e.shiftKey) {
+                e.preventDefault();
+                const delta = e.deltaX !== 0 ? e.deltaX : e.deltaY;
+                timeline.scrollLeft += delta;
+                scrollbar.scrollLeft = timeline.scrollLeft;
+            }
+        }, { passive: false });
+        
+        // グローバルに公開（updateTimeline等から呼べるように）
+        window.syncTimelineScrollbarWidth = syncScrollbarWidth;
+    }
+    
     // タイムラインマウスダウンイベント（シークバードラッグ用）
     timelineContent.addEventListener('mousedown', handleTimelineMouseDown);
     timelineContent.addEventListener('touchstart', handleTimelineTouchStartInternal, { passive: false });
@@ -184,6 +221,11 @@ function updateTimeline() {
     // 書き出しマーカーを描画
     if (typeof renderExportMarkers === 'function') {
         renderExportMarkers();
+    }
+    
+    // 固定スクロールバーの幅を同期
+    if (typeof syncTimelineScrollbarWidth === 'function') {
+        syncTimelineScrollbarWidth();
     }
 }
 
