@@ -56,49 +56,53 @@
         
         /* タイムライン横スクロールバー常時表示 */
         .timeline-rows-container {
-            display: flex;
-            flex-direction: row;
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-            overflow-x: hidden;
+            display: flex !important;
+            flex-direction: row !important;
+            flex: 1 !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
         }
         .timeline {
             overflow: hidden !important;
-            flex: 1;
-            min-width: 0;
-            position: relative;
+            flex: 1 !important;
+            min-width: 0 !important;
         }
-        /* 横スクロールバー専用エリア - 常に下部固定 */
-        .timeline-scrollbar-container {
-            width: 100%;
-            height: 18px;
-            overflow-x: scroll;
-            overflow-y: hidden;
-            background: var(--chocolate-dark, #2a1810);
-            flex-shrink: 0;
+        .timeline-body {
+            overflow: hidden !important;
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: 0 !important;
         }
-        .timeline-scrollbar-container::-webkit-scrollbar {
+        /* 縦スクロール用ラッパー */
+        .timeline-scroll-wrapper {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            min-height: 0 !important;
+        }
+        /* 横スクロールバー - 常に下部固定 */
+        .timeline-hscroll {
+            height: 16px !important;
+            overflow-x: scroll !important;
+            overflow-y: hidden !important;
+            background: var(--chocolate-dark, #2a1810) !important;
+            flex-shrink: 0 !important;
+        }
+        .timeline-hscroll::-webkit-scrollbar {
             height: 14px;
             background: var(--chocolate-dark, #2a1810);
         }
-        .timeline-scrollbar-container::-webkit-scrollbar-thumb {
+        .timeline-hscroll::-webkit-scrollbar-thumb {
             background: var(--biscuit-dark, #8b6914);
             border-radius: 7px;
             border: 2px solid var(--chocolate-dark, #2a1810);
         }
-        .timeline-scrollbar-container::-webkit-scrollbar-thumb:hover {
+        .timeline-hscroll::-webkit-scrollbar-thumb:hover {
             background: var(--biscuit-medium, #d4a84b);
         }
-        .timeline-scrollbar-inner {
+        .timeline-hscroll-inner {
             height: 1px;
-        }
-        .timeline-body {
-            overflow: hidden;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
         }
     </style>
     
@@ -260,15 +264,17 @@
                         </div>
                     </div>
                     <div class="timeline-body">
-                        <div class="timeline-rows-container">
-                            <div id="timeline-layers" class="timeline-layers"></div>
-                            <div id="timeline" class="timeline">
-                                <div id="timeline-content" class="timeline-content"></div>
-                                <div id="playhead" class="playhead"></div>
+                        <div class="timeline-scroll-wrapper">
+                            <div class="timeline-rows-container">
+                                <div id="timeline-layers" class="timeline-layers"></div>
+                                <div id="timeline" class="timeline">
+                                    <div id="timeline-content" class="timeline-content"></div>
+                                    <div id="playhead" class="playhead"></div>
+                                </div>
                             </div>
                         </div>
-                        <div class="timeline-scrollbar-container" id="timeline-scrollbar">
-                            <div class="timeline-scrollbar-inner" id="timeline-scrollbar-inner"></div>
+                        <div class="timeline-hscroll" id="timeline-hscroll">
+                            <div class="timeline-hscroll-inner" id="timeline-hscroll-inner"></div>
                         </div>
                     </div>
                 </div>

@@ -710,9 +710,7 @@ function drawLipSyncLayer(layer, time) {
     targetCtx.drawImage(
         currentImg,
         -anchorOffsetX,
-        -anchorOffsetY,
-        width,
-        height
+        -anchorOffsetY
     );
     
     // マスクを解除
@@ -849,9 +847,7 @@ function drawBlinkLayer(layer, time) {
     targetCtx.drawImage(
         currentImg,
         -anchorOffsetX,
-        -anchorOffsetY,
-        width,
-        height
+        -anchorOffsetY
     );
     
     // マスクを解除
@@ -996,9 +992,7 @@ function drawSequenceLayer(layer, localTime) {
         targetCtx.drawImage(
             currentImg,
             -anchorOffsetX,
-            -anchorOffsetY,
-            width,
-            height
+            -anchorOffsetY
         );
     }
     

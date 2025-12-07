@@ -72,41 +72,41 @@ function initTimeline() {
     // タイムライングリッドを作成
     createTimelineGrid();
     
-    // ★ 固定スクロールバーの同期処理 ★
+    // ★ 固定横スクロールバーの同期処理 ★
     const timeline = document.getElementById('timeline');
-    const scrollbar = document.getElementById('timeline-scrollbar');
-    const scrollbarInner = document.getElementById('timeline-scrollbar-inner');
+    const hscroll = document.getElementById('timeline-hscroll');
+    const hscrollInner = document.getElementById('timeline-hscroll-inner');
     
-    if (timeline && scrollbar && scrollbarInner) {
-        // スクロールバーの内側要素の幅をタイムラインコンテンツと同期
-        const syncScrollbarWidth = () => {
+    if (timeline && hscroll && hscrollInner) {
+        // スクロールバーの幅をタイムラインコンテンツと同期
+        const syncHScrollWidth = () => {
             const contentWidth = timelineContent.scrollWidth || 30000;
-            scrollbarInner.style.width = contentWidth + 'px';
+            hscrollInner.style.width = contentWidth + 'px';
         };
-        syncScrollbarWidth();
+        syncHScrollWidth();
         
-        // スクロールバー → タイムライン同期
-        scrollbar.addEventListener('scroll', () => {
-            timeline.scrollLeft = scrollbar.scrollLeft;
+        // 横スクロールバー → タイムライン同期
+        hscroll.addEventListener('scroll', () => {
+            timeline.scrollLeft = hscroll.scrollLeft;
         });
         
-        // タイムライン → スクロールバー同期（ホイールスクロール対応）
+        // タイムライン → 横スクロールバー同期
         timeline.addEventListener('scroll', () => {
-            scrollbar.scrollLeft = timeline.scrollLeft;
+            hscroll.scrollLeft = timeline.scrollLeft;
         });
         
-        // ホイールで横スクロール
+        // ホイールで横スクロール（Shift+ホイールまたは横スクロール）
         timeline.addEventListener('wheel', (e) => {
-            if (e.deltaX !== 0 || e.shiftKey) {
+            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
                 e.preventDefault();
-                const delta = e.deltaX !== 0 ? e.deltaX : e.deltaY;
+                const delta = e.shiftKey ? e.deltaY : e.deltaX;
                 timeline.scrollLeft += delta;
-                scrollbar.scrollLeft = timeline.scrollLeft;
+                hscroll.scrollLeft = timeline.scrollLeft;
             }
         }, { passive: false });
         
-        // グローバルに公開（updateTimeline等から呼べるように）
-        window.syncTimelineScrollbarWidth = syncScrollbarWidth;
+        // グローバルに公開
+        window.syncTimelineHScrollWidth = syncHScrollWidth;
     }
     
     // タイムラインマウスダウンイベント（シークバードラッグ用）
@@ -223,9 +223,9 @@ function updateTimeline() {
         renderExportMarkers();
     }
     
-    // 固定スクロールバーの幅を同期
-    if (typeof syncTimelineScrollbarWidth === 'function') {
-        syncTimelineScrollbarWidth();
+    // 固定横スクロールバーの幅を同期
+    if (typeof syncTimelineHScrollWidth === 'function') {
+        syncTimelineHScrollWidth();
     }
 }
 
