@@ -97,7 +97,7 @@ function initWindShakeWebGL() {
     if (!windShakeCanvas) {
         windShakeCanvas = document.createElement('canvas');
         windShakeGL = windShakeCanvas.getContext('webgl', { 
-            premultipliedAlpha: false, alpha: true 
+            premultipliedAlpha: true, alpha: true 
         });
     }
     
@@ -116,7 +116,9 @@ function initWindShakeWebGL() {
         varying vec2 v_texCoord;
         uniform sampler2D u_image;
         void main() {
-            gl_FragColor = texture2D(u_image, v_texCoord);
+            vec4 color = texture2D(u_image, v_texCoord);
+            // Premultiplied alpha: RGB値にアルファを乗算
+            gl_FragColor = vec4(color.rgb * color.a, color.a);
         }
     `;
     
@@ -484,7 +486,7 @@ function renderWindShakeWebGL(gl, img, mesh, canvasWidth, canvasHeight) {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(windShakeProgram);
     
     const clipPositions = [];
@@ -527,8 +529,8 @@ function renderWindShakeWebGL(gl, img, mesh, canvasWidth, canvasHeight) {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -573,8 +575,8 @@ function applyWindShakeWebGL(layerCtx, img, width, height, localTime, windSwayPa
     const anchorXInCanvas = canvasWidth / 2 - width / 2 + anchorOffsetX;
     const anchorYInCanvas = canvasHeight / 2 - height / 2 + anchorOffsetY;
     
-    // アンカーポイントが原点に来るように描画
-    layerCtx.drawImage(canvas, -anchorXInCanvas, -anchorYInCanvas, canvasWidth, canvasHeight);
+    // アンカーポイントが原点に来るように描画（サイズ指定なしで1:1描画）
+    layerCtx.drawImage(canvas, -anchorXInCanvas, -anchorYInCanvas);
 }
 
 // ===== レイヤー描画 =====

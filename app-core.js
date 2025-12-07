@@ -114,8 +114,8 @@ function render() {
     // 現在の時間を取得（アニメーション用）
     const localTime = currentTime;
     
-    // レイヤーを描画（親子関係とフォルダを考慮）
-    layers.forEach(layer => {
+    // ★ 描画順序を正しく処理するための再帰関数 ★
+    function drawLayerRecursive(layer) {
         if (!layer.visible) return;
         
         // フォルダの場合
@@ -124,22 +124,10 @@ function render() {
             if (layer.windSwayEnabled) {
                 drawFolderWithWindSway(layer, localTime);
             } else {
-                // 子レイヤーを通常通り描画（子レイヤー自身が描画される）
-                // フォルダ自体は何も描画しない
+                // フォルダ内の子レイヤーを描画（配列順で）
+                const children = layers.filter(l => l.parentLayerId === layer.id);
+                children.forEach(child => drawLayerRecursive(child));
             }
-            return;
-        }
-        
-        // ジャンプフォルダーの場合（描画は子レイヤー側で行う）
-        if (layer.type === 'folder') {
-            // フォルダ自体は何も描画しない（ジャンプ機能は子レイヤーの描画時に適用）
-            return;
-        }
-        
-        // 画像レイヤーの場合
-        // 親がフォルダで、親に風揺れが有効な場合はスキップ（親が一括描画）
-        const parent = layers.find(l => l.id === layer.parentLayerId);
-        if (parent && parent.type === 'folder' && parent.windSwayEnabled) {
             return;
         }
         
@@ -362,6 +350,12 @@ function render() {
         } else {
             ctx.restore();
         }
+    }
+    
+    // ★ ルートレイヤーのみを描画（親がないレイヤー） ★
+    // フォルダ内のレイヤーは、フォルダが描画される際に再帰的に描画される
+    layers.filter(l => !l.parentLayerId).forEach(layer => {
+        drawLayerRecursive(layer);
     });
     
     // ピン表示を更新（風揺れピンモードがONの場合）

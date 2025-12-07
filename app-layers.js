@@ -1156,10 +1156,32 @@ function createFolderFromSelection() {
         }]
     };
     
-    layers.push(folder);
+    // ★ 選択レイヤーの配列内インデックスを取得して、元の順序を保持 ★
+    const layerIndices = layersToMove.map(layer => ({
+        layer: layer,
+        index: layers.indexOf(layer)
+    })).sort((a, b) => a.index - b.index); // 配列順でソート
+    
+    // 最も小さいインデックス（配列の先頭に近い＝描画が下）を取得
+    const minIndex = layerIndices[0].index;
+    
+    // ソート済みのレイヤー順序を保持
+    const sortedLayersToMove = layerIndices.map(item => item.layer);
+    
+    // まず選択したレイヤーを配列から削除（後ろから削除してインデックスずれを防ぐ）
+    for (let i = layerIndices.length - 1; i >= 0; i--) {
+        const idx = layers.indexOf(layerIndices[i].layer);
+        if (idx > -1) {
+            layers.splice(idx, 1);
+        }
+    }
+    
+    // フォルダを元のレイヤーがあった位置に挿入
+    const insertIndex = Math.min(minIndex, layers.length);
+    layers.splice(insertIndex, 0, folder);
     
     // 各レイヤーをフォルダからの相対座標に変換
-    layersToMove.forEach(layer => {
+    sortedLayersToMove.forEach(layer => {
         // 現在の絶対座標を保存
         const worldX = layer.x || 0;
         const worldY = layer.y || 0;
@@ -1180,18 +1202,9 @@ function createFolderFromSelection() {
         layer.parentLayerId = folder.id;
     });
     
-    // ★ 配列順序を変更：選択したレイヤーをフォルダの直後に移動 ★
-    // まず選択したレイヤーを配列から削除
-    layersToMove.forEach(layer => {
-        const index = layers.indexOf(layer);
-        if (index > -1) {
-            layers.splice(index, 1);
-        }
-    });
-    
-    // フォルダの直後に選択したレイヤーを挿入（元の順序を維持）
+    // フォルダの直後に選択したレイヤーを挿入（元の配列順序を維持）
     const folderIndex = layers.indexOf(folder);
-    layersToMove.forEach((layer, i) => {
+    sortedLayersToMove.forEach((layer, i) => {
         layers.splice(folderIndex + 1 + i, 0, layer);
     });
     
